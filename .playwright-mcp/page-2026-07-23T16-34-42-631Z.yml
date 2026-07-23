@@ -1,0 +1,13 @@
+- generic [active] [ref=f2e1]:
+  - generic [ref=f2e2]:
+    - generic [ref=f2e3]: Loading globe…
+    - generic [ref=f2e4]:
+      - generic [ref=f2e5]: Default view
+      - generic [ref=f2e10]: Locating…
+    - generic:
+      - button "Search… ⌘K" [ref=f2e13]:
+        - text: Search…
+        - generic [ref=f2e17]: ⌘K
+      - button "Layers" [ref=f2e18]
+      - button "Data sources" [ref=f2e24]
+  - button "Open Next.js Dev Tools" [ref=f2e32] [cursor=pointer]

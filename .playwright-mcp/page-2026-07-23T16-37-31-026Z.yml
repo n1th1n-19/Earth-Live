@@ -1,0 +1,11 @@
+- generic [ref=f4e2]:
+  - generic [ref=f4e3]: Loading globe…
+  - generic [ref=f4e4]:
+    - generic [ref=f4e5]: Default view
+    - generic [ref=f4e10]: Locating…
+  - generic:
+    - button "Search… ⌘K" [ref=f4e13]:
+      - text: Search…
+      - generic [ref=f4e17]: ⌘K
+    - button "Layers" [ref=f4e18]
+    - button "Data sources" [ref=f4e24]

@@ -1,8 +1,11 @@
 @import "tailwindcss";
 
+/* Dark-mode-first per docs/04-ui-ux-spec.md §4.2 — near-black, not pure
+   #000, to avoid OLED smearing around bright markers. Light theme + the
+   theme setting itself are a later slice (docs/11-roadmap.md). */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a0a0c;
+  --foreground: #ededef;
 }
 
 @theme inline {
@@ -12,15 +15,14 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  overflow: hidden;
 }

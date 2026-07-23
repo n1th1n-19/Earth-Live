@@ -1,0 +1,321 @@
+// Prisma schema for Earth Live.
+// Full design rationale: docs/06-database-design.md
+// This is user-owned state + durable cache/log history — never the live
+// Earth data itself, which lives in Redis (docs/05-api-integration-guide.md §5.12)
+// and is fetched fresh from source on cache miss.
+
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [postgis]
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum AuthProvider {
+  credentials
+  google
+  apple
+}
+
+enum BookmarkKind {
+  place
+  coordinate
+  airport
+  event
+}
+
+enum NotificationCategory {
+  earthquake
+  wildfire
+  cyclone
+  aurora
+  system
+}
+
+enum Theme {
+  dark
+  light
+  system
+}
+
+enum Units {
+  metric
+  imperial
+}
+
+enum SearchResolvedKind {
+  place
+  coordinate
+  airport
+  flight
+  layer_action
+}
+
+// ---------------------------------------------------------------------------
+// Users & auth
+// ---------------------------------------------------------------------------
+
+model User {
+  id              String       @id @default(uuid())
+  email           String?      @unique
+  emailVerifiedAt DateTime?    @map("email_verified_at")
+  passwordHash    String?      @map("password_hash")
+  displayName     String?      @map("display_name")
+  avatarUrl       String?      @map("avatar_url")
+  authProvider    AuthProvider @map("auth_provider")
+  authProviderId  String?      @map("auth_provider_id")
+  lastLoginAt     DateTime?    @map("last_login_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  sessions                Session[]
+  bookmarks               Bookmark[]
+  savedLocations          SavedLocation[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
+  searchHistory           SearchHistoryEntry[]
+  preferences             Preferences?
+
+  @@unique([authProvider, authProviderId])
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  sessionToken String   @unique @map("session_token")
+  expiresAt    DateTime @map("expires_at")
+  userAgent    String?  @map("user_agent")
+  ipAddress    String?  @map("ip_address") @db.Inet
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Bookmarks & saved locations
+// ---------------------------------------------------------------------------
+
+model Bookmark {
+  id        String       @id @default(uuid())
+  userId    String       @map("user_id")
+  label     String
+  latitude  Float
+  longitude Float
+  kind      BookmarkKind
+  metadata  Json?
+  sortOrder Int          @default(0) @map("sort_order")
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  savedLocations SavedLocation[]
+
+  @@unique([userId, latitude, longitude])
+  @@index([userId])
+  @@map("bookmarks")
+}
+
+model SavedLocation {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  bookmarkId    String?  @map("bookmark_id")
+  label         String
+  latitude      Float
+  longitude     Float
+  alertRadiusKm Int      @default(200) @map("alert_radius_km")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookmark      Bookmark?      @relation(fields: [bookmarkId], references: [id], onDelete: SetNull)
+  notifications Notification[]
+
+  // Generated PostGIS geography column for ST_DWithin radius matching.
+  // Not directly queryable via Prisma Client — use $queryRaw. See docs/06-database-design.md §6.4.
+  geog Unsupported("geography(Point, 4326)")?
+
+  @@index([userId])
+  @@map("saved_locations")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id              String               @id @default(uuid())
+  userId          String               @map("user_id")
+  savedLocationId String?              @map("saved_location_id")
+  category        NotificationCategory
+  title           String
+  body            String
+  sourceEventId   String?              @map("source_event_id")
+  readAt          DateTime?            @map("read_at")
+  deliveredPushAt DateTime?            @map("delivered_push_at")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  savedLocation SavedLocation? @relation(fields: [savedLocationId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, category, sourceEventId])
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id          String               @id @default(uuid())
+  userId      String               @map("user_id")
+  category    NotificationCategory
+  minSeverity String?              @map("min_severity")
+  enabled     Boolean              @default(true)
+  pushEnabled Boolean              @default(false) @map("push_enabled")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@map("notification_preferences")
+}
+
+// ---------------------------------------------------------------------------
+// Preferences (1:1 with User)
+// ---------------------------------------------------------------------------
+
+model Preferences {
+  userId             String   @id @map("user_id")
+  theme              Theme    @default(dark)
+  units              Units    @default(metric)
+  language           String   @default("en")
+  defaultLayers      Json     @default("[]") @map("default_layers")
+  dataSaverMode      Boolean  @default(false) @map("data_saver_mode")
+  lastCameraPosition Json?    @map("last_camera_position")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("preferences")
+}
+
+// ---------------------------------------------------------------------------
+// Search history
+// ---------------------------------------------------------------------------
+
+model SearchHistoryEntry {
+  id                String              @id @default(uuid())
+  userId            String              @map("user_id")
+  query             String
+  resolvedKind      SearchResolvedKind? @map("resolved_kind")
+  resolvedLatitude  Float?              @map("resolved_latitude")
+  resolvedLongitude Float?              @map("resolved_longitude")
+  createdAt         DateTime            @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("search_history")
+}
+
+// ---------------------------------------------------------------------------
+// Durable caches (not the hot path — see docs/05-api-integration-guide.md §5.12)
+// ---------------------------------------------------------------------------
+
+model CachedEarthquake {
+  id               String   @id @default(uuid())
+  sourceEventId    String   @unique @map("source_event_id")
+  magnitude        Float
+  depthKm          Float    @map("depth_km")
+  latitude         Float
+  longitude        Float
+  occurredAt       DateTime @map("occurred_at")
+  placeDescription String   @map("place_description")
+  rawPayload       Json     @map("raw_payload")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  geog Unsupported("geography(Point, 4326)")?
+
+  @@index([occurredAt])
+  @@map("cached_earthquakes")
+}
+
+model CachedWildfire {
+  id                String   @id @default(uuid())
+  sourceDetectionId String   @unique @map("source_detection_id")
+  latitude          Float
+  longitude         Float
+  brightness        Float
+  confidence        String
+  satellite         String
+  detectedAt        DateTime @map("detected_at")
+  rawPayload        Json     @map("raw_payload")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  geog Unsupported("geography(Point, 4326)")?
+
+  @@index([detectedAt])
+  @@map("cached_wildfires")
+}
+
+model CachedFlight {
+  id         String   @id @default(uuid())
+  icao24     String
+  snapshotAt DateTime @map("snapshot_at")
+  latitude   Float
+  longitude  Float
+  altitudeM  Float?   @map("altitude_m")
+  velocityMs Float?   @map("velocity_ms")
+  headingDeg Float?   @map("heading_deg")
+  callsign   String?
+  rawPayload Json     @map("raw_payload")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([icao24, snapshotAt])
+  @@index([snapshotAt])
+  @@map("cached_flights")
+}
+
+model CachedWeatherSnapshot {
+  id              String   @id @default(uuid())
+  latitudeBucket  Float    @map("latitude_bucket")
+  longitudeBucket Float    @map("longitude_bucket")
+  snapshotAt      DateTime @map("snapshot_at")
+  rawPayload      Json     @map("raw_payload")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([latitudeBucket, longitudeBucket, snapshotAt])
+  @@index([snapshotAt])
+  @@map("cached_weather")
+}
+
+// ---------------------------------------------------------------------------
+// Observability
+// ---------------------------------------------------------------------------
+
+model ApiLog {
+  id           BigInt   @id @default(autoincrement())
+  source       String
+  endpoint     String
+  statusCode   Int?     @map("status_code")
+  latencyMs    Int      @map("latency_ms")
+  cacheHit     Boolean  @map("cache_hit")
+  errorMessage String?  @map("error_message")
+  requestedAt  DateTime @map("requested_at")
+
+  @@index([source, requestedAt(sort: Desc)])
+  @@map("api_logs")
+}
