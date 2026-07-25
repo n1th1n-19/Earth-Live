@@ -67,6 +67,20 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   const viewerRef = useRef<{ cesiumElement?: CesiumViewer }>(null);
   const hasFlownRef = useRef(false);
 
+  // A destroyed Cesium Viewer isn't null — `.destroy()` just nulls its
+  // internal `_cesiumWidget`, so `viewerRef.current?.cesiumElement` alone
+  // doesn't catch it (throws "can't access property 'scene', this.
+  // _cesiumWidget is undefined" on the next camera call). Happens whenever
+  // the Viewer gets torn down and recreated — dev Fast Refresh, a Resium
+  // read-only-prop recreate — and a stale ref outlives the old instance
+  // until the new one is provided. Single guarded accessor for every
+  // imperative call site below.
+  function getLiveViewer(): CesiumViewer | null {
+    const viewer = viewerRef.current?.cesiumElement;
+    if (!viewer || viewer.isDestroyed()) return null;
+    return viewer;
+  }
+
   // Cesium's `creditContainer` is a construction-time-only option in
   // Resium (it doesn't react to prop changes after mount), so this must be
   // a real DOM node available synchronously on first render — not a ref
@@ -109,7 +123,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   // Real-time day/night terminator (FR-1) — Cesium computes this from actual
   // sun position once lighting is enabled; no custom math needed.
   useEffect(() => {
-    const viewer = viewerRef.current?.cesiumElement;
+    const viewer = getLiveViewer();
     if (viewer) {
       viewer.scene.globe.enableLighting = true;
     }
@@ -118,7 +132,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   // FR-25/26: sample camera pose on moveEnd for share-URL encoding
   // (src/lib/view-state.ts / page.tsx).
   useEffect(() => {
-    const viewer = viewerRef.current?.cesiumElement;
+    const viewer = getLiveViewer();
     if (!viewer) return;
 
     function sampleCamera() {
@@ -138,7 +152,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   }, [setCameraPosition]);
 
   useEffect(() => {
-    const viewer = viewerRef.current?.cesiumElement;
+    const viewer = getLiveViewer();
     if (!viewer || latitude == null || longitude == null || hasFlownRef.current) return;
 
     hasFlownRef.current = true;
@@ -151,7 +165,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   // Command palette / search "fly to" requests (FR-12) and the recenter
   // control both funnel through the same store field.
   useEffect(() => {
-    const viewer = viewerRef.current?.cesiumElement;
+    const viewer = getLiveViewer();
     if (!viewer || !flyToTarget) return;
 
     viewer.camera.flyTo({
@@ -166,8 +180,8 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   }, [flyToTarget, clearFlyTo]);
 
   function pickEllipsoidCoordinates(windowPosition: Cartesian2): LatLon | null {
-    const viewer = viewerRef.current?.cesiumElement;
-    if (!viewer || viewer.isDestroyed()) return null;
+    const viewer = getLiveViewer();
+    if (!viewer) return null;
     const cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid);
     if (!cartesian) return null;
     const cartographic = Cartographic.fromCartesian(cartesian);
@@ -197,29 +211,48 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   }
 
   function zoomIn() {
-    viewerRef.current?.cesiumElement?.camera.zoomIn();
+    getLiveViewer()?.camera.zoomIn();
   }
 
   function zoomOut() {
-    viewerRef.current?.cesiumElement?.camera.zoomOut();
+    getLiveViewer()?.camera.zoomOut();
   }
 
-  // docs/04-ui-ux-spec.md §4.6: "+ / - | Zoom in/out". Reads viewerRef
-  // directly rather than calling zoomIn/zoomOut so the effect can mount
-  // once with an empty dep array — those two are plain functions
-  // redefined every render, not stable callbacks.
+  // docs/04-ui-ux-spec.md §4.6: "+ / - | Zoom in/out", plus WASD fly
+  // controls. Reads viewerRef directly rather than calling zoomIn/zoomOut so
+  // the effect can mount once with an empty dep array — those two are plain
+  // functions redefined every render, not stable callbacks. WASD move
+  // distance scales with camera height so panning feels consistent whether
+  // zoomed to street level or the whole globe; the browser's native
+  // key-repeat on a held key gives continuous movement for free.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
 
-      const viewer = viewerRef.current?.cesiumElement;
+      const viewer = getLiveViewer();
       if (!viewer) return;
 
       if (e.key === "+" || e.key === "=") {
         viewer.camera.zoomIn();
       } else if (e.key === "-" || e.key === "_") {
         viewer.camera.zoomOut();
+      } else {
+        const moveRate = viewer.camera.positionCartographic.height * 0.02;
+        switch (e.key.toLowerCase()) {
+          case "w":
+            viewer.camera.moveForward(moveRate);
+            break;
+          case "s":
+            viewer.camera.moveBackward(moveRate);
+            break;
+          case "a":
+            viewer.camera.moveLeft(moveRate);
+            break;
+          case "d":
+            viewer.camera.moveRight(moveRate);
+            break;
+        }
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -228,7 +261,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
 
   function recenter() {
     if (latitude == null || longitude == null) return;
-    viewerRef.current?.cesiumElement?.camera.flyTo({
+    getLiveViewer()?.camera.flyTo({
       destination: Cartesian3.fromDegrees(longitude, latitude, 1_500_000),
       duration: 1.5,
     });
@@ -243,13 +276,23 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   }
 
   function screenshot() {
-    const canvas = viewerRef.current?.cesiumElement?.scene.canvas;
+    const canvas = getLiveViewer()?.scene.canvas;
     if (!canvas) return;
     const link = document.createElement("a");
     link.download = `earth-live-${new Date().toISOString()}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
   }
+
+  // Resium treats `contextOptions` as construction-time-only — an inline
+  // object literal gets a new reference every render, which Resium reads as
+  // "the prop changed" and destroys + recreates the entire Viewer (WebGL
+  // context, terrain, imagery, every entity) on every re-render of Globe.
+  // That's what "<Viewer> is recreated because..." in the console meant, and
+  // why zoomIn/zoomOut/recenter/screenshot then threw on a mid-teardown
+  // cesiumElement. Same stable-reference treatment as hiddenCreditsContainer
+  // and baseImageryLayer above.
+  const contextOptions = useMemo(() => ({ webgl: { preserveDrawingBuffer: true } }), []);
 
   const measureDistanceKm = totalPathDistanceKm(measurePoints);
 
@@ -260,7 +303,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
         full
         baseLayer={baseImageryLayer}
         terrainProvider={ellipsoidTerrain}
-        contextOptions={{ webgl: { preserveDrawingBuffer: true } }}
+        contextOptions={contextOptions}
         creditContainer={hiddenCreditsContainer}
         animation={false}
         timeline={false}

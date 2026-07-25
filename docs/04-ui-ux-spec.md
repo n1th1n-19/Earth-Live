@@ -58,6 +58,7 @@ Design rule of thumb: **if a panel isn't currently answering a question the user
 | `R` | Toggle replay mode |
 | `Esc` | Close active panel / exit replay / deselect event |
 | `+ / -` | Zoom in/out |
+| `W / A / S / D` | Fly forward/left/backward/right |
 | `Space` (in replay) | Play/pause |
 
 ## 4.7 Responsive breakpoint table
