@@ -99,7 +99,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
 
   function pickEllipsoidCoordinates(windowPosition: Cesium.Cartesian2): LatLon | null {
     const viewer = viewerRef.current?.cesiumElement;
-    if (!viewer) return null;
+    if (!viewer || viewer.isDestroyed()) return null;
     const cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid);
     if (!cartesian) return null;
     const cartographic = Cesium.Cartographic.fromCartesian(cartesian);

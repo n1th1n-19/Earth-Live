@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { fetchNearbyStations } from "@/lib/adapters/openaq";
+import { fetchNearestAirQuality } from "@/lib/adapters/openaq";
 
-// UNTESTED — see comment atop src/lib/adapters/openaq.ts. Not wired into the
-// UI until verified against a real OPENAQ_API_KEY.
 const querySchema = z.object({
   lat: z.coerce.number().min(-90).max(90),
   lon: z.coerce.number().min(-180).max(180),
 });
 
-// Also never build-time-static — see src/app/api/flights/route.ts.
+// Live data — never build-time-static. See src/app/api/flights/route.ts.
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
@@ -23,8 +21,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const stations = await fetchNearbyStations(parsed.data.lat, parsed.data.lon);
-    return NextResponse.json(stations);
+    const aqi = await fetchNearestAirQuality(parsed.data.lat, parsed.data.lon);
+    return NextResponse.json(aqi);
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Upstream OpenAQ source unavailable" },

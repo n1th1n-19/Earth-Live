@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "predev": "node scripts/copy-cesium-assets.mjs",
-    "dev": "next dev",
+    "dev": "next dev -p 3081",
     "prebuild": "node scripts/copy-cesium-assets.mjs",
     "build": "next build",
     "start": "next start",
