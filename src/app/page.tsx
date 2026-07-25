@@ -49,6 +49,8 @@ export default function Home() {
   const requestFlyTo = useUiStore((s) => s.requestFlyTo);
   const layerPanelOpen = useUiStore((s) => s.layerPanelOpen);
   const setLayerPanelOpen = useUiStore((s) => s.setLayerPanelOpen);
+  const bookmarksPanelOpen = useUiStore((s) => s.bookmarksPanelOpen);
+  const setBookmarksPanelOpen = useUiStore((s) => s.setBookmarksPanelOpen);
   const setSelectedEvent = useUiStore((s) => s.setSelectedEvent);
   const replayMode = useUiStore((s) => s.replayMode);
   const setReplayMode = useUiStore((s) => s.setReplayMode);
@@ -72,8 +74,7 @@ export default function Home() {
   }, [sharedView, requestFlyTo, setActiveLayers]);
 
   // docs/04-ui-ux-spec.md §4.6 keyboard shortcuts. Cmd/Ctrl+K and `/` are
-  // handled inside CommandPalette itself. B (bookmarks) is not wired —
-  // its open state isn't lifted to the store, unlike layerPanelOpen.
+  // handled inside CommandPalette itself.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement;
@@ -81,6 +82,8 @@ export default function Home() {
 
       if (e.key.toLowerCase() === "l") {
         setLayerPanelOpen(!layerPanelOpen);
+      } else if (e.key.toLowerCase() === "b") {
+        setBookmarksPanelOpen(!bookmarksPanelOpen);
       } else if (e.key.toLowerCase() === "f") {
         if (document.fullscreenElement) document.exitFullscreen();
         else document.documentElement.requestFullscreen();
@@ -89,13 +92,22 @@ export default function Home() {
       } else if (e.key === "Escape") {
         setSelectedEvent(null);
         setLayerPanelOpen(false);
+        setBookmarksPanelOpen(false);
         setMobileMenuOpen(false);
         if (replayMode) setReplayMode(false);
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [layerPanelOpen, setLayerPanelOpen, setSelectedEvent, replayMode, setReplayMode]);
+  }, [
+    layerPanelOpen,
+    setLayerPanelOpen,
+    bookmarksPanelOpen,
+    setBookmarksPanelOpen,
+    setSelectedEvent,
+    replayMode,
+    setReplayMode,
+  ]);
 
   const utilityButtons = (
     <>

@@ -1,23 +1,25 @@
 "use client";
 
-import { useState } from "react";
 import { Bookmark as BookmarkIcon, Trash2 } from "lucide-react";
 import { useUiStore } from "@/lib/store";
 
 // FR-19/20/21: anonymous bookmarks via local storage (Zustand persist),
 // syncable to the `bookmarks` table once auth ships (docs/06-database-design.md).
+// Open state lives in the store (not local useState) so the `B` shortcut
+// (docs/04-ui-ux-spec.md §4.6) can toggle it from page.tsx.
 export function BookmarksPanel() {
   const bookmarks = useUiStore((s) => s.bookmarks);
   const removeBookmark = useUiStore((s) => s.removeBookmark);
   const requestFlyTo = useUiStore((s) => s.requestFlyTo);
-  const [open, setOpen] = useState(false);
+  const open = useUiStore((s) => s.bookmarksPanelOpen);
+  const setOpen = useUiStore((s) => s.setBookmarksPanelOpen);
 
   if (bookmarks.length === 0 && !open) return null;
 
   return (
     <div className="pointer-events-auto">
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(!open)}
         className="flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-3 py-2 text-xs text-neutral-200 backdrop-blur-xl hover:bg-black/60"
       >
         <BookmarkIcon size={14} />

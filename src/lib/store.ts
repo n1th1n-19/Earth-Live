@@ -41,6 +41,8 @@ interface UiState {
   bookmarks: Bookmark[];
   addBookmark: (bookmark: Omit<Bookmark, "id" | "createdAt">) => void;
   removeBookmark: (id: string) => void;
+  bookmarksPanelOpen: boolean;
+  setBookmarksPanelOpen: (open: boolean) => void;
 
   units: Units;
   setUnits: (units: Units) => void;
@@ -108,6 +110,8 @@ export const useUiStore = create<UiState>()(
         });
       },
       removeBookmark: (id) => set({ bookmarks: get().bookmarks.filter((b) => b.id !== id) }),
+      bookmarksPanelOpen: false,
+      setBookmarksPanelOpen: (open) => set({ bookmarksPanelOpen: open }),
 
       units: "metric",
       setUnits: (units) => set({ units }),
