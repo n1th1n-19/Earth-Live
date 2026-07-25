@@ -14,8 +14,11 @@ import {
   Cartesian3,
   Cartographic,
   Color,
+  createWorldImageryAsync,
   EllipsoidTerrainProvider,
   ImageryLayer,
+  Ion,
+  IonWorldImageryStyle,
   Math as CesiumMath,
   OpenStreetMapImageryProvider,
 } from "cesium";
@@ -34,12 +37,17 @@ import { WildfireLayer } from "@/components/globe/layers/WildfireLayer";
 // Primary globe engine per docs/03-architecture.md §3.2: CesiumJS, chosen for
 // its native WGS84 globe, real-time sun/lighting, and terrain streaming.
 //
-// This slice uses free OpenStreetMap raster tiles (no key, attribution
-// required — docs/05-api-integration-guide.md §5.5) and the default
-// ellipsoid terrain (no Cesium ion token configured yet). Swap in Cesium
-// World Terrain once NEXT_PUBLIC_CESIUM_ION_TOKEN is provisioned
-// (docs/05-api-integration-guide.md §5.9).
-//
+// Base imagery is satellite (Cesium ion's world imagery, Bing Maps Aerial —
+// free ion tier) when NEXT_PUBLIC_CESIUM_ION_TOKEN is configured, falling
+// back to free OpenStreetMap raster tiles (no key, attribution required —
+// docs/05-api-integration-guide.md §5.5) if it isn't. Terrain is still the
+// default ellipsoid regardless — that's a separate swap
+// (docs/05-api-integration-guide.md §5.9), not requested here.
+const ionToken = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
+if (ionToken) {
+  Ion.defaultAccessToken = ionToken;
+}
+
 // EllipsoidTerrainProvider is stateless (pure math, no GPU resources) so a
 // module-level singleton is fine. The imagery layer is NOT — Cesium caches
 // WebGL textures inside it that are bound to whichever Viewer/context last
@@ -82,15 +90,19 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   const [measuring, setMeasuring] = useState(false);
   const [measurePoints, setMeasurePoints] = useState<LatLon[]>([]);
 
-  // Fresh per mount — see the comment on `ellipsoidTerrain` above.
-  const osmImageryLayer = useMemo(
+  // Fresh per mount — see the comment on `ellipsoidTerrain` above. Satellite
+  // imagery via ion when a token is configured; ImageryLayer.fromProviderAsync
+  // accepts the provider promise directly, no need to await it here.
+  const baseImageryLayer = useMemo(
     () =>
-      new ImageryLayer(
-        new OpenStreetMapImageryProvider({
-          url: "https://tile.openstreetmap.org/",
-          credit: "© OpenStreetMap contributors",
-        }),
-      ),
+      ionToken
+        ? ImageryLayer.fromProviderAsync(createWorldImageryAsync({ style: IonWorldImageryStyle.AERIAL }))
+        : new ImageryLayer(
+            new OpenStreetMapImageryProvider({
+              url: "https://tile.openstreetmap.org/",
+              credit: "© OpenStreetMap contributors",
+            }),
+          ),
     [],
   );
 
@@ -224,7 +236,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
       <Viewer
         ref={viewerRef}
         full
-        baseLayer={osmImageryLayer}
+        baseLayer={baseImageryLayer}
         terrainProvider={ellipsoidTerrain}
         contextOptions={{ webgl: { preserveDrawingBuffer: true } }}
         creditContainer={hiddenCreditsContainer}

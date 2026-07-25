@@ -37,6 +37,17 @@ const nextConfig: NextConfig = {
   // is the standard, accepted trade-off for Cesium/React integrations.
   reactStrictMode: false,
   async headers() {
+    // Production only: Next dev's Turbopack HMR/chunk-loading runtime uses
+    // eval()-based module wrapping for source-mapped stack traces, which
+    // `script-src`'s lack of 'unsafe-eval' silently blocked — this is what
+    // was actually behind the stuck "Loading globe…" and the earlier HMR
+    // "Invariant: Expected a request ID" error, not a Cesium/app bug. CSP
+    // is a production hardening concern; dev tooling needs looser script
+    // execution than any real deployment should ever allow.
+    if (process.env.NODE_ENV !== "production") {
+      return [];
+    }
+
     return [
       {
         source: "/:path*",
