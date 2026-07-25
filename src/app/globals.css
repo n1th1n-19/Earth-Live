@@ -26,3 +26,24 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   overflow: hidden;
 }
+
+/* docs/04-ui-ux-spec.md §4.5 — every interactive element gets a visible
+   focus state distinct from hover, applied globally rather than per
+   component so nothing is missed. */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid #34d399;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

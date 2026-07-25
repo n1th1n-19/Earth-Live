@@ -3,6 +3,7 @@
 import * as Cesium from "cesium";
 import { Entity, PointGraphics } from "resium";
 import { useEarthquakes } from "@/lib/use-earthquakes";
+import { useEarthquakeHistory } from "@/lib/use-earthquake-history";
 import { useUiStore } from "@/lib/store";
 import type { Earthquake } from "@/lib/adapters/usgs-earthquakes";
 
@@ -21,8 +22,14 @@ function sizeFor(mag: number | null): number {
 }
 
 export function EarthquakeLayer() {
-  const { data } = useEarthquakes();
+  const replayMode = useUiStore((s) => s.replayMode);
+  const replayWindowStart = useUiStore((s) => s.replayWindowStart);
+  const replayCursor = useUiStore((s) => s.replayCursor);
   const setSelectedEvent = useUiStore((s) => s.setSelectedEvent);
+
+  const live = useEarthquakes();
+  const history = useEarthquakeHistory(replayWindowStart, replayCursor, replayMode);
+  const data = replayMode ? history.data : live.data;
 
   if (!data) return null;
 

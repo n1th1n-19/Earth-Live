@@ -7,10 +7,10 @@ import { persist } from "zustand/middleware";
 // (liveness badge is only honest if the layer actually does something).
 // Clouds/night-lights/borders/etc. from the full docs/02 layer table are not
 // implemented yet — deliberately not exposed as togglable here.
-export type LayerId = "weather" | "earthquakes" | "flights" | "iss";
+export type LayerId = "weather" | "earthquakes" | "flights" | "iss" | "wildfires";
 
 export interface SelectedEvent {
-  kind: "earthquake" | "flight" | "iss" | "satellite";
+  kind: "earthquake" | "flight" | "iss" | "satellite" | "wildfire";
   title: string;
   attributes: { label: string; value: string }[];
   sourceUrl?: string;
@@ -31,6 +31,7 @@ export type Units = "metric" | "imperial";
 interface UiState {
   activeLayers: LayerId[];
   toggleLayer: (id: LayerId) => void;
+  setActiveLayers: (layers: LayerId[]) => void;
   layerPanelOpen: boolean;
   setLayerPanelOpen: (open: boolean) => void;
 
@@ -47,13 +48,30 @@ interface UiState {
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
 
-  flyToTarget: { latitude: number; longitude: number } | null;
-  requestFlyTo: (latitude: number, longitude: number) => void;
+  flyToTarget: { latitude: number; longitude: number; height?: number } | null;
+  requestFlyTo: (latitude: number, longitude: number, height?: number) => void;
   clearFlyTo: () => void;
 
   // FR-24: cursor coordinate readout, updated imperatively from Globe.tsx.
   cursorCoordinates: { latitude: number; longitude: number } | null;
   setCursorCoordinates: (coords: { latitude: number; longitude: number } | null) => void;
+
+  // FR-25/26: current camera pose, sampled on Cesium's `moveEnd` — this is
+  // what a shared URL actually needs to reproduce the view (fly-to targets
+  // above are one-shot commands, not a persistent "where is the camera now").
+  cameraPosition: { latitude: number; longitude: number; height: number } | null;
+  setCameraPosition: (pos: { latitude: number; longitude: number; height: number }) => void;
+
+  // FR-29: replay mode. `replayCursor` is the scrubbed instant within
+  // [replayWindowStart, replayWindowEnd]; EarthquakeLayer switches from the
+  // live feed to a `/api/earthquakes/history` query filtered up to the
+  // cursor while this is active.
+  replayMode: boolean;
+  replayWindowStart: string;
+  replayWindowEnd: string;
+  replayCursor: string;
+  setReplayMode: (on: boolean) => void;
+  setReplayCursor: (iso: string) => void;
 }
 
 const DEFAULT_LAYERS: LayerId[] = ["weather", "earthquakes", "flights", "iss"];
@@ -70,6 +88,7 @@ export const useUiStore = create<UiState>()(
             : [...current, id],
         });
       },
+      setActiveLayers: (layers) => set({ activeLayers: layers }),
       layerPanelOpen: false,
       setLayerPanelOpen: (open) => set({ layerPanelOpen: open }),
 
@@ -97,11 +116,27 @@ export const useUiStore = create<UiState>()(
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
 
       flyToTarget: null,
-      requestFlyTo: (latitude, longitude) => set({ flyToTarget: { latitude, longitude } }),
+      requestFlyTo: (latitude, longitude, height) => set({ flyToTarget: { latitude, longitude, height } }),
       clearFlyTo: () => set({ flyToTarget: null }),
 
       cursorCoordinates: null,
       setCursorCoordinates: (coords) => set({ cursorCoordinates: coords }),
+
+      cameraPosition: null,
+      setCameraPosition: (pos) => set({ cameraPosition: pos }),
+
+      replayMode: false,
+      replayWindowStart: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      replayWindowEnd: new Date().toISOString(),
+      replayCursor: new Date().toISOString(),
+      setReplayMode: (on) =>
+        set({
+          replayMode: on,
+          replayWindowStart: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+          replayWindowEnd: new Date().toISOString(),
+          replayCursor: new Date().toISOString(),
+        }),
+      setReplayCursor: (iso) => set({ replayCursor: iso }),
     }),
     {
       name: "earth-live-ui",

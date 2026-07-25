@@ -4,6 +4,7 @@ import * as Cesium from "cesium";
 import { Entity, PointGraphics } from "resium";
 import { useFlights } from "@/lib/use-flights";
 import { useUiStore } from "@/lib/store";
+import { formatSpeedKmh } from "@/lib/units";
 import type { Flight } from "@/lib/adapters/opensky";
 
 // Capped to MAX_FLIGHTS (src/lib/adapters/opensky.ts) and rendered as plain
@@ -41,18 +42,23 @@ export function FlightsLayer() {
 }
 
 function toSelectedEvent(flight: Flight) {
+  const units = useUiStore.getState().units;
+  const altitudeLabel =
+    flight.altitudeM == null
+      ? "—"
+      : units === "imperial"
+        ? `${Math.round(flight.altitudeM * 3.28084)} ft`
+        : `${Math.round(flight.altitudeM)} m`;
+
   return {
     kind: "flight" as const,
     title: flight.callsign ?? flight.icao24,
     attributes: [
       { label: "Origin country", value: flight.originCountry },
-      {
-        label: "Altitude",
-        value: flight.altitudeM != null ? `${Math.round(flight.altitudeM)} m` : "—",
-      },
+      { label: "Altitude", value: altitudeLabel },
       {
         label: "Speed",
-        value: flight.velocityMs != null ? `${Math.round(flight.velocityMs * 3.6)} km/h` : "—",
+        value: flight.velocityMs != null ? formatSpeedKmh(flight.velocityMs * 3.6, units) : "—",
       },
       {
         label: "Heading",

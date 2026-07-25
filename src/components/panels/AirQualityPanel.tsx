@@ -16,7 +16,11 @@ export function AirQualityPanel({ location }: { location: UserLocation }) {
   if (!location.resolved) return null;
 
   return (
-    <div className="pointer-events-auto w-72 rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-neutral-100 backdrop-blur-xl shadow-2xl">
+    <div
+      role="status"
+      aria-live="polite"
+      className="pointer-events-auto w-72 rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-neutral-100 backdrop-blur-xl shadow-2xl"
+    >
       <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-neutral-400">
         <Wind size={14} />
         Air Quality

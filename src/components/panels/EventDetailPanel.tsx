@@ -19,7 +19,12 @@ export function EventDetailPanel() {
   }
 
   return (
-    <div className="pointer-events-auto w-80 rounded-2xl border border-white/10 bg-black/50 p-4 text-sm text-neutral-100 backdrop-blur-xl shadow-2xl">
+    <div
+      role="region"
+      aria-live="polite"
+      aria-label={`${event.title} details`}
+      className="pointer-events-auto w-80 rounded-2xl border border-white/10 bg-black/50 p-4 text-sm text-neutral-100 backdrop-blur-xl shadow-2xl"
+    >
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-sm font-medium leading-tight">{event.title}</h3>
         <button onClick={() => setSelectedEvent(null)} className="shrink-0 text-neutral-500 hover:text-neutral-200">

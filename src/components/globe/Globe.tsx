@@ -11,10 +11,12 @@ import { Entity, PointGraphics, PolylineGraphics, Viewer } from "resium";
 import type { Viewer as CesiumViewer } from "cesium";
 import { useUiStore } from "@/lib/store";
 import { totalPathDistanceKm, type LatLon } from "@/lib/geo-math";
+import { formatDistanceKm } from "@/lib/units";
 import { FloatingControls } from "@/components/globe/FloatingControls";
 import { EarthquakeLayer } from "@/components/globe/layers/EarthquakeLayer";
 import { FlightsLayer } from "@/components/globe/layers/FlightsLayer";
 import { IssLayer } from "@/components/globe/layers/IssLayer";
+import { WildfireLayer } from "@/components/globe/layers/WildfireLayer";
 
 // Primary globe engine per docs/03-architecture.md §3.2: CesiumJS, chosen for
 // its native WGS84 globe, real-time sun/lighting, and terrain streaming.
@@ -45,6 +47,8 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   const hasFlownRef = useRef(false);
 
   const activeLayers = useUiStore((s) => s.activeLayers);
+  const units = useUiStore((s) => s.units);
+  const setCameraPosition = useUiStore((s) => s.setCameraPosition);
   const setCursorCoordinates = useUiStore((s) => s.setCursorCoordinates);
   const flyToTarget = useUiStore((s) => s.flyToTarget);
   const clearFlyTo = useUiStore((s) => s.clearFlyTo);
@@ -73,6 +77,28 @@ export function Globe({ latitude, longitude }: GlobeProps) {
     }
   }, []);
 
+  // FR-25/26: sample camera pose on moveEnd for share-URL encoding
+  // (src/lib/view-state.ts / page.tsx).
+  useEffect(() => {
+    const viewer = viewerRef.current?.cesiumElement;
+    if (!viewer) return;
+
+    function sampleCamera() {
+      if (!viewer || viewer.isDestroyed()) return;
+      const cartographic = viewer.camera.positionCartographic;
+      setCameraPosition({
+        latitude: Cesium.Math.toDegrees(cartographic.latitude),
+        longitude: Cesium.Math.toDegrees(cartographic.longitude),
+        height: cartographic.height,
+      });
+    }
+
+    viewer.camera.moveEnd.addEventListener(sampleCamera);
+    return () => {
+      if (!viewer.isDestroyed()) viewer.camera.moveEnd.removeEventListener(sampleCamera);
+    };
+  }, [setCameraPosition]);
+
   useEffect(() => {
     const viewer = viewerRef.current?.cesiumElement;
     if (!viewer || latitude == null || longitude == null || hasFlownRef.current) return;
@@ -91,7 +117,11 @@ export function Globe({ latitude, longitude }: GlobeProps) {
     if (!viewer || !flyToTarget) return;
 
     viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(flyToTarget.longitude, flyToTarget.latitude, 1_000_000),
+      destination: Cesium.Cartesian3.fromDegrees(
+        flyToTarget.longitude,
+        flyToTarget.latitude,
+        flyToTarget.height ?? 1_000_000,
+      ),
       duration: 1.5,
     });
     clearFlyTo();
@@ -187,6 +217,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
         {activeLayers.includes("earthquakes") && <EarthquakeLayer />}
         {activeLayers.includes("flights") && <FlightsLayer />}
         {activeLayers.includes("iss") && <IssLayer />}
+        {activeLayers.includes("wildfires") && <WildfireLayer />}
 
         {measurePoints.map((point, i) => (
           <Entity key={i} position={Cesium.Cartesian3.fromDegrees(point.longitude, point.latitude)}>
@@ -223,7 +254,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
         <div className="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-white/10 bg-black/50 px-3 py-1.5 font-mono text-xs text-emerald-300 backdrop-blur-xl">
           {measurePoints.length < 2
             ? "Click two or more points to measure"
-            : `${measureDistanceKm.toFixed(1)} km`}
+            : formatDistanceKm(measureDistanceKm, units)}
         </div>
       )}
     </div>

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # postinstall runs `prisma generate`, which only reads schema.prisma
+      # (no DB connection needed) — safe without secrets. See
+      # docs/08-deployment-guide.md §8.2.
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Unit tests
+        run: npm test
+
+      # Every API route is force-dynamic (see src/app/api/*/route.ts), so
+      # the build never executes them at build time — no real env vars
+      # required here either.
+      - name: Build
+        run: npm run build

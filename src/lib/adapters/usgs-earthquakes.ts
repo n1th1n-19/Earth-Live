@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { cacheAside } from "@/lib/cache";
 import { logApiCall } from "@/lib/api-log";
+import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 
 // USGS Earthquake Hazards Program — docs/05-api-integration-guide.md §5.3.
 // No key. Public domain. Cache TTL 60s (matches the feed's own update cadence).
@@ -52,7 +54,19 @@ export async function fetchRecentEarthquakes(): Promise<Earthquake[]> {
 
       const json = await response.json();
       const parsed = feedSchema.parse(json);
-      return parsed.features.map(normalize);
+      const earthquakes = parsed.features.map(normalize);
+
+      // Feeds Replay mode (FR-29): every cache-miss fetch durably persists
+      // into `cached_earthquakes` (docs/06-database-design.md), building
+      // real history organically as the live feed is polled — no separate
+      // ingestion cron exists yet (that needs Vercel Cron, blocked per
+      // TODO.md), so history only covers whenever the app has actually been
+      // running and polling since this shipped.
+      await persistEarthquakes(earthquakes).catch((err) => {
+        console.error("Failed to persist earthquakes for replay history:", err);
+      });
+
+      return earthquakes;
     });
 
     logApiCall({
@@ -75,6 +89,30 @@ export async function fetchRecentEarthquakes(): Promise<Earthquake[]> {
     });
     throw err;
   }
+}
+
+async function persistEarthquakes(earthquakes: Earthquake[]): Promise<void> {
+  const withMagnitude = earthquakes.filter((e): e is Earthquake & { magnitude: number } => e.magnitude !== null);
+
+  await Promise.allSettled(
+    withMagnitude.map((e) =>
+      prisma.cachedEarthquake.upsert({
+        where: { sourceEventId: e.id },
+        create: {
+          sourceEventId: e.id,
+          magnitude: e.magnitude,
+          depthKm: e.depthKm,
+          latitude: e.latitude,
+          longitude: e.longitude,
+          occurredAt: new Date(e.occurredAt),
+          placeDescription: e.place ?? "Unknown",
+          rawPayload: e as unknown as Prisma.InputJsonValue,
+        },
+        // Event data is immutable once USGS issues it — nothing to update.
+        update: {},
+      }),
+    ),
+  );
 }
 
 function normalize(feature: z.infer<typeof featureSchema>): Earthquake {

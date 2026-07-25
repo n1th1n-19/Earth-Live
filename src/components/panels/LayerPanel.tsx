@@ -9,6 +9,7 @@ import { useUiStore, type LayerId } from "@/lib/store";
 const LAYERS: { id: LayerId; label: string; category: string; cadence: string }[] = [
   { id: "weather", label: "Weather", category: "Weather", cadence: "~15 min" },
   { id: "earthquakes", label: "Earthquakes", category: "Geological", cadence: "~60 s" },
+  { id: "wildfires", label: "Wildfires", category: "Geological", cadence: "~3 hr" },
   { id: "flights", label: "Flights", category: "Transportation", cadence: "~45 s" },
   { id: "iss", label: "ISS", category: "Space", cadence: "~2 s" },
 ];

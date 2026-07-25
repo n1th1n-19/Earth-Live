@@ -12,6 +12,7 @@ import { useGeocodeSearch } from "@/lib/use-geocode-search";
 const LAYER_LABELS: Record<LayerId, string> = {
   weather: "Weather",
   earthquakes: "Earthquakes",
+  wildfires: "Wildfires",
   flights: "Flights",
   iss: "ISS",
 };

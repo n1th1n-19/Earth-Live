@@ -3,6 +3,9 @@
 import { Loader2, MapPin, Wind, Droplets, Cloud } from "lucide-react";
 import type { UserLocation } from "@/lib/geolocation";
 import { useWeather } from "@/lib/use-weather";
+import { useTimezone } from "@/lib/use-timezone";
+import { useUiStore } from "@/lib/store";
+import { formatTemperature, formatSpeedKmh } from "@/lib/units";
 
 // Glass panel per docs/04-ui-ux-spec.md §4.2/§4.4 — floating over the globe,
 // never blocking it, progressive population per FR-7 (this panel doesn't
@@ -12,9 +15,18 @@ export function WeatherPanel({ location }: { location: UserLocation }) {
     location.resolved ? location.latitude : null,
     location.resolved ? location.longitude : null,
   );
+  const { data: timezone } = useTimezone(
+    location.resolved ? location.latitude : null,
+    location.resolved ? location.longitude : null,
+  );
+  const units = useUiStore((s) => s.units);
 
   return (
-    <div className="pointer-events-auto w-72 rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-neutral-100 backdrop-blur-xl shadow-2xl">
+    <div
+      role="status"
+      aria-live="polite"
+      className="pointer-events-auto w-72 rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-neutral-100 backdrop-blur-xl shadow-2xl"
+    >
       <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-neutral-400">
         <MapPin size={14} />
         <span>
@@ -24,6 +36,7 @@ export function WeatherPanel({ location }: { location: UserLocation }) {
               ? "Approximate location"
               : "Default view"}
         </span>
+        {timezone && <span className="text-neutral-600">· {timezone.timezoneId}</span>}
       </div>
 
       {!location.resolved && (
@@ -48,13 +61,13 @@ export function WeatherPanel({ location }: { location: UserLocation }) {
 
       {data && (
         <div className="mt-3 space-y-2">
-          <div className="font-mono text-3xl">{Math.round(data.temperatureC)}°C</div>
+          <div className="font-mono text-3xl">{formatTemperature(data.temperatureC, units)}</div>
           <div className="text-neutral-400">
-            Feels like {Math.round(data.apparentTemperatureC)}°C
+            Feels like {formatTemperature(data.apparentTemperatureC, units)}
           </div>
           <div className="grid grid-cols-3 gap-2 pt-2 font-mono text-xs text-neutral-300">
             <div className="flex items-center gap-1">
-              <Wind size={12} /> {Math.round(data.windSpeedKmh)} km/h
+              <Wind size={12} /> {formatSpeedKmh(data.windSpeedKmh, units)}
             </div>
             <div className="flex items-center gap-1">
               <Droplets size={12} /> {Math.round(data.humidityPercent)}%
