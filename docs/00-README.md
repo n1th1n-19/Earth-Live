@@ -6,6 +6,8 @@ Earth Live is an interactive, real-time visualization of everything happening on
 
 This directory is the complete software design document set for Earth Live. It is written to be handed directly to an engineering team with no additional discovery work required before sprint planning begins.
 
+**This is the target design, not a status report.** For what's actually built, working, and verified right now — versus still planned — see [`TODO.md`](../TODO.md) at the project root. One deliberate deviation from this set: authentication (§2.2.15, §3.6) is out of scope for the current build by product decision — the app ships and runs fully anonymous, with no Auth.js implementation. Everything else in this design remains the intended target.
+
 ## How to read this set
 
 Read in order for a first pass; use as reference thereafter.

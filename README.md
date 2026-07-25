@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Earth Live
 
-## Getting Started
+**"The Earth, Live."**
 
-First, run the development server:
+An interactive 3D globe showing real-time weather, earthquakes, wildfires, flights, the ISS, air quality, and space weather — every value on screen traces to a free, live, public API. No mock data, no AI, no auth required.
+
+Full design spec: [`docs/`](docs/00-README.md). Current build status (what's actually done vs. still planned): [`TODO.md`](TODO.md).
+
+## What's live right now
+
+- 3D CesiumJS globe with real-time day/night terminator, your GPS location (or IP fallback)
+- Live weather, sunrise/sunset, moon phase, air quality, timezone for wherever you are
+- Live earthquakes (USGS), wildfires (NASA FIRMS), flights (OpenSky), the ISS moving via real orbital mechanics (CelesTrak + SGP4)
+- Live Kp geomagnetic index + NASA space weather notifications
+- Command palette with live place search (Nominatim), bookmarks, measurement tool, screenshot/fullscreen
+- Replay mode — scrubs real earthquake history the app has been accumulating in its own database
+- Settings (units), stats dashboard (live counts), consolidated data-source credits, shareable view-state URLs
+
+See [`docs/05-api-integration-guide.md`](docs/05-api-integration-guide.md) for every data source, its rate limits, caching, and attribution requirements.
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # fill in the keys you have — see below
+npm run dev                  # http://localhost:3081
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`npm install` runs `prisma generate` automatically (no live database needed for that step).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+All documented in [`.env.example`](.env.example). Nothing is required to run the app locally — every adapter degrades gracefully without its key (cache falls back to in-memory without Redis, and the four keyed adapters below simply won't work until configured):
 
-## Learn More
+| Variable | Needed for | Get it from |
+|---|---|---|
+| `DATABASE_URL` | Replay mode, Prisma schema | [neon.tech](https://neon.tech) (or Vercel Marketplace) |
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Shared cache + rate limiting | [upstash.com](https://upstash.com) (or Vercel Marketplace) |
+| `FIRMS_MAP_KEY` | Wildfires layer | `firms.modaps.eosdis.nasa.gov/api/map_key` |
+| `NASA_API_KEY` | Space weather notifications | `api.nasa.gov` |
+| `OPENAQ_API_KEY` | Air quality panel | `explore.openaq.org` |
+| `GEONAMES_USERNAME` | Timezone lookup | `geonames.org` (enable "Free Web Services" in account settings) |
+| `NEXT_PUBLIC_CESIUM_ION_TOKEN` | Real terrain (optional — globe defaults to a flat ellipsoid without it) | `ion.cesium.com` |
+| `SENTRY_DSN` / `SENTRY_AUTH_TOKEN` | Error tracking (optional) | `sentry.io` |
 
-To learn more about Next.js, take a look at the following resources:
+Auth env vars exist in `.env.example` for schema completeness but auth is **out of scope for this build** — the whole app works anonymously.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Command | Does |
+|---|---|
+| `npm run dev` | Dev server on port 3081 |
+| `npm run build` | Production build |
+| `npm test` | Vitest — adapter normalization + geo-math + SGP4 propagation tests |
+| `npm run lint` | ESLint |
+| `npx prisma migrate dev` | Apply schema to `DATABASE_URL` |
 
-## Deploy on Vercel
+## Stack
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Next.js 16 (App Router) · CesiumJS/Resium · TanStack Query · Zustand · Prisma + Neon Postgres (PostGIS) · Upstash Redis · Tailwind · Sentry. Full rationale for every choice: [`docs/07-tech-stack.md`](docs/07-tech-stack.md).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Docs
+
+- [`docs/00-README.md`](docs/00-README.md) — index of the full design doc set (architecture, UI/UX spec, API guide, DB schema, security, roadmap)
+- [`TODO.md`](TODO.md) — the honest, currently-accurate build checklist: what's done, what's stubbed, what's genuinely blocked and why
