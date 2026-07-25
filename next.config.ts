@@ -2,22 +2,28 @@ import { withSentryConfig } from "@sentry/nextjs";
 import path from "node:path";
 import type { NextConfig } from "next";
 
-// docs/10-security-guide.md §10.3. `tile.openstreetmap.org` is allowlisted
-// because the globe currently fetches OSM tiles client-side directly (not
-// proxied) — see the note in docs/05-api-integration-guide.md §5.5 about
-// moving to a self-hosted tile pipeline before production traffic, at
-// which point this can tighten to 'self'. `unsafe-inline` on style-src is
-// needed for Cesium's own widget/credit-container styles, which it injects
-// inline. No CORS headers are added anywhere: Route Handlers default to
-// same-origin-only unless explicitly opened up, which is the locked-down
-// state docs/10-security-guide.md §10.6 asks for — there's nothing to add.
+// docs/10-security-guide.md §10.3. Imagery hosts are allowlisted because
+// the globe fetches tiles client-side directly (not proxied): OpenStreetMap
+// as the keyless fallback, and — when NEXT_PUBLIC_CESIUM_ION_TOKEN is set —
+// Cesium ion's world imagery, which actually proxies to Bing Maps Aerial.
+// Confirmed via a real call to Cesium ion's asset endpoint that tile bytes
+// come from *.virtualearth.net (Bing's CDN, load-balanced across several
+// subdomains, not one fixed host) while *.cesium.com serves ion's own
+// API/attribution assets. This was the actual cause of the globe not
+// rendering after switching to satellite imagery — CSP silently blocked
+// every tile request in production (dev was unaffected since CSP is
+// prod-only). `unsafe-inline` on style-src is needed for Cesium's own
+// widget/credit-container styles, which it injects inline. No CORS headers
+// are added anywhere: Route Handlers default to same-origin-only unless
+// explicitly opened up, which is the locked-down state
+// docs/10-security-guide.md §10.6 asks for — there's nothing to add.
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://tile.openstreetmap.org",
+  "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.virtualearth.net https://*.cesium.com",
   "font-src 'self' data:",
-  "connect-src 'self' https://tile.openstreetmap.org",
+  "connect-src 'self' https://tile.openstreetmap.org https://*.virtualearth.net https://*.cesium.com",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

@@ -151,10 +151,10 @@ export default function Home() {
 
         <button
           onClick={() => setMobileMenuOpen(true)}
-          className="pointer-events-auto flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-3 py-2 text-xs text-neutral-300 backdrop-blur-xl hover:bg-black/60 sm:hidden"
+          className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-black/40 text-neutral-300 backdrop-blur-xl hover:bg-black/60 sm:hidden"
           aria-label="More"
         >
-          <Menu size={14} />
+          <Menu size={18} />
         </button>
       </div>
 
@@ -162,8 +162,12 @@ export default function Home() {
         <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-20 rounded-t-2xl border-t border-white/10 bg-black/80 p-4 backdrop-blur-2xl sm:hidden">
           <div className="mb-3 flex items-center justify-between">
             <span className="text-xs uppercase tracking-wide text-neutral-400">Menu</span>
-            <button onClick={() => setMobileMenuOpen(false)} className="text-neutral-500 hover:text-neutral-200">
-              <X size={16} />
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex h-11 w-11 items-center justify-center text-neutral-500 hover:text-neutral-200"
+              aria-label="Close menu"
+            >
+              <X size={18} />
             </button>
           </div>
           <div className="flex flex-wrap gap-3">{utilityButtons}</div>

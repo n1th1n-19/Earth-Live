@@ -36,7 +36,7 @@ export function ApiStatusPanel() {
         <div className="mt-2 w-72 rounded-2xl border border-white/10 bg-black/50 p-3 text-sm text-neutral-100 backdrop-blur-xl shadow-2xl">
           <div className="flex items-center justify-between pb-2">
             <span className="text-xs uppercase tracking-wide text-neutral-400">Data sources</span>
-            <button onClick={() => setOpen(false)} className="text-neutral-500 hover:text-neutral-200">
+            <button onClick={() => setOpen(false)} className="flex h-11 w-11 items-center justify-center text-neutral-500 hover:text-neutral-200">
               <X size={14} />
             </button>
           </div>

@@ -204,6 +204,28 @@ export function Globe({ latitude, longitude }: GlobeProps) {
     viewerRef.current?.cesiumElement?.camera.zoomOut();
   }
 
+  // docs/04-ui-ux-spec.md §4.6: "+ / - | Zoom in/out". Reads viewerRef
+  // directly rather than calling zoomIn/zoomOut so the effect can mount
+  // once with an empty dep array — those two are plain functions
+  // redefined every render, not stable callbacks.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+
+      const viewer = viewerRef.current?.cesiumElement;
+      if (!viewer) return;
+
+      if (e.key === "+" || e.key === "=") {
+        viewer.camera.zoomIn();
+      } else if (e.key === "-" || e.key === "_") {
+        viewer.camera.zoomOut();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   function recenter() {
     if (latitude == null || longitude == null) return;
     viewerRef.current?.cesiumElement?.camera.flyTo({

@@ -45,6 +45,22 @@ export function ReplayControls() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
 
+  // docs/04-ui-ux-spec.md §4.6: "Space (in replay) | Play/pause".
+  useEffect(() => {
+    if (!replayMode) return;
+
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+      if (e.key === " ") {
+        e.preventDefault();
+        setPlaying((v) => !v);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [replayMode]);
+
   function handleScrub(e: React.ChangeEvent<HTMLInputElement>) {
     const pct = Number(e.target.value) / 1000;
     setCursor(new Date(startMs + pct * (endMs - startMs)).toISOString());
@@ -74,7 +90,7 @@ export function ReplayControls() {
             setPlaying(false);
             setReplayMode(false);
           }}
-          className="text-neutral-500 hover:text-neutral-200"
+          className="flex h-11 w-11 items-center justify-center text-neutral-500 hover:text-neutral-200"
           aria-label="Exit replay mode"
         >
           <X size={14} />
@@ -84,10 +100,11 @@ export function ReplayControls() {
       <div className="flex items-center gap-3">
         <button
           onClick={() => setPlaying((v) => !v)}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 hover:bg-white/20"
           aria-label={playing ? "Pause" : "Play"}
+          title="Play/pause (Space)"
         >
-          {playing ? <Pause size={14} /> : <Play size={14} />}
+          {playing ? <Pause size={16} /> : <Play size={16} />}
         </button>
         <input
           type="range"
