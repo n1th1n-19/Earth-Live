@@ -6,7 +6,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 // connections. Standard `pg` driver works against Neon's direct TCP endpoint;
 // see docs/07-tech-stack.md §7.2.
 declare global {
-  // eslint-disable-next-line no-var
   var __prisma: PrismaClient | undefined;
 }
 

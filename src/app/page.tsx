@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { Search, Menu, X } from "lucide-react";
 import { useUserLocation } from "@/lib/geolocation";
 import { useUiStore } from "@/lib/store";
-import { decodeViewState } from "@/lib/view-state";
+import { decodeViewState, type ViewState } from "@/lib/view-state";
 import { WeatherPanel } from "@/components/panels/WeatherPanel";
 import { AirQualityPanel } from "@/components/panels/AirQualityPanel";
 import { SunMoonPanel } from "@/components/panels/SunMoonPanel";
@@ -54,19 +54,22 @@ export default function Home() {
   const setReplayMode = useUiStore((s) => s.setReplayMode);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [sharedView, setSharedView] = useState(false);
 
   // FR-26: opening a shared URL reproduces the exact view, no account
-  // needed. Runs once on mount; suppresses Globe's own geolocation-driven
-  // fly-to below so the shared view isn't immediately overridden.
+  // needed. Decoded once via a lazy initializer (not an effect + setState,
+  // which React flags as cascading-render-prone) — suppresses Globe's own
+  // geolocation-driven fly-to below so the shared view isn't overridden.
+  const [sharedView] = useState<ViewState | null>(() =>
+    typeof window === "undefined" ? null : decodeViewState(new URLSearchParams(window.location.search)),
+  );
+
+  // requestFlyTo/setActiveLayers sync an external store, not React state —
+  // fine to call from an effect, unlike setSharedView above would have been.
   useEffect(() => {
-    const decoded = decodeViewState(new URLSearchParams(window.location.search));
-    if (!decoded) return;
-    setSharedView(true);
-    requestFlyTo(decoded.latitude, decoded.longitude, decoded.height);
-    if (decoded.layers.length > 0) setActiveLayers(decoded.layers);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!sharedView) return;
+    requestFlyTo(sharedView.latitude, sharedView.longitude, sharedView.height);
+    if (sharedView.layers.length > 0) setActiveLayers(sharedView.layers);
+  }, [sharedView, requestFlyTo, setActiveLayers]);
 
   // docs/04-ui-ux-spec.md §4.6 keyboard shortcuts. Cmd/Ctrl+K and `/` are
   // handled inside CommandPalette itself. B (bookmarks) is not wired —
