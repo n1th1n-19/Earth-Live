@@ -1,6 +1,6 @@
 "use client";
 
-import * as Cesium from "cesium";
+import { Cartesian2, Cartesian3, Color } from "cesium";
 import { useEffect, useState } from "react";
 import { Entity, LabelGraphics, PointGraphics } from "resium";
 import { useSatelliteGroup } from "@/lib/use-satellites";
@@ -11,7 +11,7 @@ import { propagateTle } from "@/lib/satellite-propagation";
 // speed is ~7.7 km/s, so a coarser interval would visibly lag).
 export function IssLayer() {
   const { data: stations } = useSatelliteGroup("stations");
-  const [position, setPosition] = useState<Cesium.Cartesian3 | null>(null);
+  const [position, setPosition] = useState<Cartesian3 | null>(null);
 
   const iss = stations?.find((s) => s.name.includes("ISS"));
 
@@ -23,7 +23,7 @@ export function IssLayer() {
       const propagated = propagateTle(iss.tleLine1, iss.tleLine2, new Date());
       if (!propagated) return;
       setPosition(
-        Cesium.Cartesian3.fromDegrees(
+        Cartesian3.fromDegrees(
           propagated.longitude,
           propagated.latitude,
           propagated.heightKm * 1000,
@@ -40,14 +40,14 @@ export function IssLayer() {
 
   return (
     <Entity position={position} name="International Space Station">
-      <PointGraphics pixelSize={10} color={Cesium.Color.WHITE} outlineColor={Cesium.Color.CYAN} outlineWidth={2} />
+      <PointGraphics pixelSize={10} color={Color.WHITE} outlineColor={Color.CYAN} outlineWidth={2} />
       <LabelGraphics
         text="ISS"
         font="12px monospace"
-        fillColor={Cesium.Color.WHITE}
-        pixelOffset={new Cesium.Cartesian2(0, -16)}
+        fillColor={Color.WHITE}
+        pixelOffset={new Cartesian2(0, -16)}
         showBackground
-        backgroundColor={Cesium.Color.BLACK.withAlpha(0.6)}
+        backgroundColor={Color.BLACK.withAlpha(0.6)}
       />
     </Entity>
   );

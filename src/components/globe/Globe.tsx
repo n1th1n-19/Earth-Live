@@ -5,7 +5,20 @@
 import "@/lib/cesium-base-url";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
-import * as Cesium from "cesium";
+// Named imports (not `import * as Cesium`) — Cesium's own bundle-size
+// guidance: this doesn't shrink the dev-mode Turbopack chunk (which
+// includes the whole engine unminified either way), but it's a genuine,
+// low-risk win for the minified production bundle's tree-shaking.
+import {
+  Cartesian2,
+  Cartesian3,
+  Cartographic,
+  Color,
+  EllipsoidTerrainProvider,
+  ImageryLayer,
+  Math as CesiumMath,
+  OpenStreetMapImageryProvider,
+} from "cesium";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Entity, PointGraphics, PolylineGraphics, Viewer } from "resium";
 import type { Viewer as CesiumViewer } from "cesium";
@@ -34,7 +47,7 @@ import { WildfireLayer } from "@/components/globe/layers/WildfireLayer";
 // StrictMode double-mount) throws "bindTexture: object does not belong to
 // this context" once a second Viewer's context tries to reuse it. It's
 // created fresh per Globe instance below instead.
-const ellipsoidTerrain = new Cesium.EllipsoidTerrainProvider();
+const ellipsoidTerrain = new EllipsoidTerrainProvider();
 
 interface GlobeProps {
   latitude: number | null;
@@ -45,6 +58,19 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<{ cesiumElement?: CesiumViewer }>(null);
   const hasFlownRef = useRef(false);
+
+  // Cesium's `creditContainer` is a construction-time-only option in
+  // Resium (it doesn't react to prop changes after mount), so this must be
+  // a real DOM node available synchronously on first render — not a ref
+  // populated later via commit, which would still be null when Resium
+  // constructs the Cesium.Viewer. Doesn't need to be attached to the
+  // visible tree; Cesium only needs somewhere to put credit nodes.
+  const hiddenCreditsContainer = useMemo(() => {
+    if (typeof document === "undefined") return undefined;
+    const el = document.createElement("div");
+    el.style.display = "none";
+    return el;
+  }, []);
 
   const activeLayers = useUiStore((s) => s.activeLayers);
   const units = useUiStore((s) => s.units);
@@ -59,8 +85,8 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   // Fresh per mount — see the comment on `ellipsoidTerrain` above.
   const osmImageryLayer = useMemo(
     () =>
-      new Cesium.ImageryLayer(
-        new Cesium.OpenStreetMapImageryProvider({
+      new ImageryLayer(
+        new OpenStreetMapImageryProvider({
           url: "https://tile.openstreetmap.org/",
           credit: "© OpenStreetMap contributors",
         }),
@@ -87,8 +113,8 @@ export function Globe({ latitude, longitude }: GlobeProps) {
       if (!viewer || viewer.isDestroyed()) return;
       const cartographic = viewer.camera.positionCartographic;
       setCameraPosition({
-        latitude: Cesium.Math.toDegrees(cartographic.latitude),
-        longitude: Cesium.Math.toDegrees(cartographic.longitude),
+        latitude: CesiumMath.toDegrees(cartographic.latitude),
+        longitude: CesiumMath.toDegrees(cartographic.longitude),
         height: cartographic.height,
       });
     }
@@ -105,7 +131,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
 
     hasFlownRef.current = true;
     viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(longitude, latitude, 1_500_000),
+      destination: Cartesian3.fromDegrees(longitude, latitude, 1_500_000),
       duration: 2,
     });
   }, [latitude, longitude]);
@@ -117,7 +143,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
     if (!viewer || !flyToTarget) return;
 
     viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(
+      destination: Cartesian3.fromDegrees(
         flyToTarget.longitude,
         flyToTarget.latitude,
         flyToTarget.height ?? 1_000_000,
@@ -127,25 +153,25 @@ export function Globe({ latitude, longitude }: GlobeProps) {
     clearFlyTo();
   }, [flyToTarget, clearFlyTo]);
 
-  function pickEllipsoidCoordinates(windowPosition: Cesium.Cartesian2): LatLon | null {
+  function pickEllipsoidCoordinates(windowPosition: Cartesian2): LatLon | null {
     const viewer = viewerRef.current?.cesiumElement;
     if (!viewer || viewer.isDestroyed()) return null;
     const cartesian = viewer.camera.pickEllipsoid(windowPosition, viewer.scene.globe.ellipsoid);
     if (!cartesian) return null;
-    const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+    const cartographic = Cartographic.fromCartesian(cartesian);
     return {
-      latitude: Cesium.Math.toDegrees(cartographic.latitude),
-      longitude: Cesium.Math.toDegrees(cartographic.longitude),
+      latitude: CesiumMath.toDegrees(cartographic.latitude),
+      longitude: CesiumMath.toDegrees(cartographic.longitude),
     };
   }
 
-  function handleMouseMove(movement: { endPosition?: Cesium.Cartesian2 }) {
+  function handleMouseMove(movement: { endPosition?: Cartesian2 }) {
     if (!movement.endPosition) return;
     const coords = pickEllipsoidCoordinates(movement.endPosition);
     setCursorCoordinates(coords);
   }
 
-  function handleClick(movement: { position?: Cesium.Cartesian2 }) {
+  function handleClick(movement: { position?: Cartesian2 }) {
     if (!measuring || !movement.position) return;
     const coords = pickEllipsoidCoordinates(movement.position);
     if (coords) setMeasurePoints((prev) => [...prev, coords]);
@@ -169,7 +195,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   function recenter() {
     if (latitude == null || longitude == null) return;
     viewerRef.current?.cesiumElement?.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(longitude, latitude, 1_500_000),
+      destination: Cartesian3.fromDegrees(longitude, latitude, 1_500_000),
       duration: 1.5,
     });
   }
@@ -201,6 +227,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
         baseLayer={osmImageryLayer}
         terrainProvider={ellipsoidTerrain}
         contextOptions={{ webgl: { preserveDrawingBuffer: true } }}
+        creditContainer={hiddenCreditsContainer}
         animation={false}
         timeline={false}
         baseLayerPicker={false}
@@ -220,18 +247,18 @@ export function Globe({ latitude, longitude }: GlobeProps) {
         {activeLayers.includes("wildfires") && <WildfireLayer />}
 
         {measurePoints.map((point, i) => (
-          <Entity key={i} position={Cesium.Cartesian3.fromDegrees(point.longitude, point.latitude)}>
-            <PointGraphics pixelSize={8} color={Cesium.Color.LIME} outlineColor={Cesium.Color.BLACK} outlineWidth={1} />
+          <Entity key={i} position={Cartesian3.fromDegrees(point.longitude, point.latitude)}>
+            <PointGraphics pixelSize={8} color={Color.LIME} outlineColor={Color.BLACK} outlineWidth={1} />
           </Entity>
         ))}
         {measurePoints.length >= 2 && (
           <Entity>
             <PolylineGraphics
-              positions={Cesium.Cartesian3.fromDegreesArray(
+              positions={Cartesian3.fromDegreesArray(
                 measurePoints.flatMap((p) => [p.longitude, p.latitude]),
               )}
               width={2}
-              material={Cesium.Color.LIME}
+              material={Color.LIME}
               clampToGround
             />
           </Entity>

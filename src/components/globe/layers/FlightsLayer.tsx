@@ -1,6 +1,6 @@
 "use client";
 
-import * as Cesium from "cesium";
+import { Cartesian3, Color } from "cesium";
 import { Entity, PointGraphics } from "resium";
 import { useFlights } from "@/lib/use-flights";
 import { useUiStore } from "@/lib/store";
@@ -21,7 +21,7 @@ export function FlightsLayer() {
       {data.map((flight) => (
         <Entity
           key={flight.icao24}
-          position={Cesium.Cartesian3.fromDegrees(
+          position={Cartesian3.fromDegrees(
             flight.longitude,
             flight.latitude,
             flight.altitudeM ?? 0,
@@ -31,8 +31,8 @@ export function FlightsLayer() {
         >
           <PointGraphics
             pixelSize={6}
-            color={Cesium.Color.CYAN.withAlpha(0.9)}
-            outlineColor={Cesium.Color.BLACK}
+            color={Color.CYAN.withAlpha(0.9)}
+            outlineColor={Color.BLACK}
             outlineWidth={1}
           />
         </Entity>

@@ -1,6 +1,6 @@
 "use client";
 
-import * as Cesium from "cesium";
+import { Cartesian3, Color } from "cesium";
 import { Entity, PointGraphics } from "resium";
 import { useEarthquakes } from "@/lib/use-earthquakes";
 import { useEarthquakeHistory } from "@/lib/use-earthquake-history";
@@ -9,11 +9,11 @@ import type { Earthquake } from "@/lib/adapters/usgs-earthquakes";
 
 // Magnitude-scaled markers, colored by severity — docs/04-ui-ux-spec.md §4.5
 // ("color is never the sole channel": size scales with magnitude too).
-function colorFor(mag: number | null): Cesium.Color {
-  if (mag == null) return Cesium.Color.GRAY;
-  if (mag < 3) return Cesium.Color.YELLOW.withAlpha(0.8);
-  if (mag < 5) return Cesium.Color.ORANGE.withAlpha(0.85);
-  return Cesium.Color.RED.withAlpha(0.9);
+function colorFor(mag: number | null): Color {
+  if (mag == null) return Color.GRAY;
+  if (mag < 3) return Color.YELLOW.withAlpha(0.8);
+  if (mag < 5) return Color.ORANGE.withAlpha(0.85);
+  return Color.RED.withAlpha(0.9);
 }
 
 function sizeFor(mag: number | null): number {
@@ -38,14 +38,14 @@ export function EarthquakeLayer() {
       {data.map((quake) => (
         <Entity
           key={quake.id}
-          position={Cesium.Cartesian3.fromDegrees(quake.longitude, quake.latitude)}
+          position={Cartesian3.fromDegrees(quake.longitude, quake.latitude)}
           name={quake.place ?? "Earthquake"}
           onClick={() => setSelectedEvent(toSelectedEvent(quake))}
         >
           <PointGraphics
             pixelSize={sizeFor(quake.magnitude)}
             color={colorFor(quake.magnitude)}
-            outlineColor={Cesium.Color.BLACK}
+            outlineColor={Color.BLACK}
             outlineWidth={1}
           />
         </Entity>

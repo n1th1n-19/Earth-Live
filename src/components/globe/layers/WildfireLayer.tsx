@@ -1,6 +1,6 @@
 "use client";
 
-import * as Cesium from "cesium";
+import { Cartesian3, Color } from "cesium";
 import { Entity, PointGraphics } from "resium";
 import { useWildfires } from "@/lib/use-wildfires";
 import { useUiStore } from "@/lib/store";
@@ -21,14 +21,14 @@ export function WildfireLayer() {
       {data.map((fire) => (
         <Entity
           key={`${fire.latitude}-${fire.longitude}-${fire.acquiredAt}`}
-          position={Cesium.Cartesian3.fromDegrees(fire.longitude, fire.latitude)}
+          position={Cartesian3.fromDegrees(fire.longitude, fire.latitude)}
           name="Fire detection"
           onClick={() => setSelectedEvent(toSelectedEvent(fire))}
         >
           <PointGraphics
             pixelSize={5}
-            color={Cesium.Color.ORANGERED.withAlpha(0.85)}
-            outlineColor={Cesium.Color.BLACK}
+            color={Color.ORANGERED.withAlpha(0.85)}
+            outlineColor={Color.BLACK}
             outlineWidth={0.5}
           />
         </Entity>
