@@ -9,6 +9,12 @@ import { logApiCall } from "@/lib/api-log";
 const CACHE_TTL_SECONDS = 3 * 60 * 60; // matches satellite revisit cadence, §5.12
 const AREA = "world"; // FIRMS area/csv endpoint accepts a bounding box or "world"
 const DAY_RANGE = 1;
+// Global VIIRS 24h detections run 30k-100k+ rows (confirmed live: 66,608 on
+// 2026-07-25) — WildfireLayer renders one Resium <Entity> per row, and
+// mounting that many in one commit is what was crashing the browser tab.
+// Same cap pattern as MAX_FLIGHTS in opensky.ts; kept highest brightness_ti4
+// first since that's the strongest signal of an actual active fire.
+const MAX_FIRES = 1000;
 
 export interface FireDetection {
   latitude: number;
@@ -87,5 +93,7 @@ function parseCsv(csv: string): FireDetection[] {
         acquiredAt: `${cells[dateIdx]}T${cells[timeIdx].padStart(4, "0").slice(0, 2)}:${cells[timeIdx].padStart(4, "0").slice(2)}:00Z`,
       };
     })
-    .filter((d) => Number.isFinite(d.latitude) && Number.isFinite(d.longitude));
+    .filter((d) => Number.isFinite(d.latitude) && Number.isFinite(d.longitude))
+    .sort((a, b) => b.brightness - a.brightness)
+    .slice(0, MAX_FIRES);
 }
