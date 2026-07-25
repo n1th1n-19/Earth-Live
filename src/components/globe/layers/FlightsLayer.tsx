@@ -1,43 +1,97 @@
 "use client";
 
+import { Fragment, useState } from "react";
 import { Cartesian3, Color } from "cesium";
-import { Entity, PointGraphics } from "resium";
+import { CustomDataSource, Entity, PointGraphics, PolylineGraphics } from "resium";
 import { useFlights } from "@/lib/use-flights";
+import { useEntityClustering } from "@/lib/use-entity-clustering";
 import { useUiStore } from "@/lib/store";
 import { formatSpeedKmh } from "@/lib/units";
 import type { Flight } from "@/lib/adapters/opensky";
 
 // Capped to MAX_FLIGHTS (src/lib/adapters/opensky.ts) and rendered as plain
-// points for now — heading-aware icons and marker clustering for the full
-// global set are TODO.md Phase 5 items.
+// points — heading-aware icons are still a TODO.md Phase 5 item, but
+// clustering (via useEntityClustering) now keeps dense airspace legible.
+const TRAIL_LENGTH = 6;
+
+type LatLon = { latitude: number; longitude: number };
+
 export function FlightsLayer() {
   const { data } = useFlights();
   const setSelectedEvent = useUiStore((s) => s.setSelectedEvent);
+  const clustering = useEntityClustering();
+
+  // Real per-aircraft position history accumulated client-side across polls
+  // — OpenSky's free anonymous tier doesn't expose historical tracks, so a
+  // trail is built up here rather than fetched, not synthesized motion.
+  // Capped at TRAIL_LENGTH and rebuilt from the latest poll each time, so an
+  // aircraft that drops out of coverage drops out of `trails` too — bounded,
+  // can't grow unboundedly like the FIRMS/USGS layers almost did.
+  //
+  // This can't be a plain useEffect + setState (React flags that as a
+  // cascading-render risk, same issue page.tsx hit with its shared-URL
+  // state), but it also isn't pure per-render derivation — it depends on the
+  // *previous* poll's trails. React's sanctioned pattern for exactly this
+  // ("adjusting state when a prop changes") is comparing against the last
+  // seen value and calling setState directly in the render body, guarded so
+  // it only fires once per new `data` reference from React Query.
+  const [prevData, setPrevData] = useState(data);
+  const [trails, setTrails] = useState<Map<string, LatLon[]>>(new Map());
+  if (data && data !== prevData) {
+    setPrevData(data);
+    const next = new Map<string, LatLon[]>();
+    for (const flight of data) {
+      const existing = trails.get(flight.icao24) ?? [];
+      next.set(
+        flight.icao24,
+        [...existing, { latitude: flight.latitude, longitude: flight.longitude }].slice(-TRAIL_LENGTH),
+      );
+    }
+    setTrails(next);
+  }
 
   if (!data) return null;
 
   return (
-    <>
-      {data.map((flight) => (
-        <Entity
-          key={flight.icao24}
-          position={Cartesian3.fromDegrees(
-            flight.longitude,
-            flight.latitude,
-            flight.altitudeM ?? 0,
-          )}
-          name={flight.callsign ?? flight.icao24}
-          onClick={() => setSelectedEvent(toSelectedEvent(flight))}
-        >
-          <PointGraphics
-            pixelSize={6}
-            color={Color.CYAN.withAlpha(0.9)}
-            outlineColor={Color.BLACK}
-            outlineWidth={1}
-          />
-        </Entity>
-      ))}
-    </>
+    <CustomDataSource clustering={clustering}>
+      {data.map((flight) => {
+        const trail = trails.get(flight.icao24);
+        return (
+          <Fragment key={flight.icao24}>
+            {trail?.slice(1).map((point, i) => (
+              <Entity key={i}>
+                <PolylineGraphics
+                  positions={Cartesian3.fromDegreesArray([
+                    trail[i].longitude,
+                    trail[i].latitude,
+                    point.longitude,
+                    point.latitude,
+                  ])}
+                  width={2}
+                  material={Color.CYAN.withAlpha(0.1 + 0.5 * ((i + 1) / trail.length))}
+                />
+              </Entity>
+            ))}
+            <Entity
+              position={Cartesian3.fromDegrees(
+                flight.longitude,
+                flight.latitude,
+                flight.altitudeM ?? 0,
+              )}
+              name={flight.callsign ?? flight.icao24}
+              onClick={() => setSelectedEvent(toSelectedEvent(flight))}
+            >
+              <PointGraphics
+                pixelSize={6}
+                color={Color.CYAN.withAlpha(0.9)}
+                outlineColor={Color.BLACK}
+                outlineWidth={1}
+              />
+            </Entity>
+          </Fragment>
+        );
+      })}
+    </CustomDataSource>
   );
 }
 

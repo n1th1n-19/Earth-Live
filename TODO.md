@@ -28,7 +28,7 @@ Auth is explicitly out of scope per product decision — every Phase 1 auth item
   - [x] Open-Meteo (weather) → `WeatherPanel`
   - [x] USGS earthquakes → `EarthquakeLayer` **+ now persists every fetch to `cached_earthquakes` for Replay mode** (see Phase 5)
   - [x] CelesTrak + SGP4 → `IssLayer`
-  - [x] OpenSky (flights) → `FlightsLayer`
+  - [x] OpenSky (flights) → `FlightsLayer` — **now uses a registered OAuth2 client** (`OPENSKY_CLIENT_ID/SECRET`, ~4000 credits/day vs anonymous ~400/day, 10s cache TTL vs 45s); anonymous quota was hit and confirmed via a real 429 mid-session, verified the OAuth token exchange + authenticated call live before wiring it in
   - [x] NOAA SWPC (Kp) → `SpaceWeatherPanel`
   - [x] sunrise-sunset.org → `SunMoonPanel`
   - [x] Nominatim geocoding → command palette search
@@ -46,11 +46,18 @@ Auth is explicitly out of scope per product decision — every Phase 1 auth item
 ## Phase 3 — Globe core
 
 - [x] CesiumJS + Resium, code-split
-- [ ] Cesium World Terrain — still `EllipsoidTerrainProvider`; `NEXT_PUBLIC_CESIUM_ION_TOKEN` is set but not wired in yet
-- [x] OSM imagery, real-time lighting, camera + fly-to, measurement tool, screenshot/fullscreen
-- [x] **Wildfire markers** (new)
+- [x] **Cesium World Terrain** — wired via `createWorldTerrainAsync` (vertex normals + water mask) when `NEXT_PUBLIC_CESIUM_ION_TOKEN` is set, falling back to `EllipsoidTerrainProvider`. Real terrain tiles confirmed live from `assets.ion.cesium.com` (a different host than `api.cesium.com` — added to CSP separately, `*.cesium.com` doesn't cover it).
+- [x] OSM imagery, real-time lighting, camera + fly-to, measurement tool, screenshot/fullscreen, WASD fly controls
+- [x] **Wildfire markers**, capped at 1000 (`MAX_FIRES` in `firms.ts` — global VIIRS 24h feed runs 30k-100k+ rows, was crashing the tab before this cap)
 - [x] **Real unit conversion** (metric/imperial) applied to weather, measurement tool, flight altitude/speed — a units toggle that didn't change any number would be fake, so this was built as a real, shared `src/lib/units.ts`
-- [ ] Cloud-cover overlay, night-lights overlay, MapLibre minimap, marker clustering, 3D buildings/borders/roads/population — **still not started**, these need offline tile-processing pipelines outside a single session's scope
+- [x] **Cloud overlay** — NASA GIBS true-color VIIRS imagery (real satellite pixels, ~1 day lag; GIBS has no isolated cloud-mask layer), toggleable, off by default
+- [x] **Night-lights overlay** — NASA Black Marble (VIIRS City Lights 2012, static dataset) via Cesium's built-in `dayAlpha`/`nightAlpha`, always on, blended in only on the real night side
+- [x] **Marker clustering** — earthquakes/flights/wildfires now render inside a `<CustomDataSource clustering={...}>` (`src/lib/use-entity-clustering.ts`) instead of a flat `<Entity>` list
+- [x] **Earthquake heatmap mode** — toggle in the layer panel; canvas-generated additive-blob density map (not a real KDE), same "approximation, disclosed" spirit as the FIRMS caveat
+- [x] **Flight trails** — short fading polyline per aircraft, built from real positions accumulated client-side across polls (OpenSky's free tier has no historical track endpoint)
+- [x] **Aurora oval** — approximate geomagnetic-pole ellipses, always on, sized/gated by the real live Kp index (`/api/space-weather`) — not the real OVATION model, disclosed as such
+- [x] Atmosphere tuned (`skyAtmosphere` hue/saturation/brightness shift) + cinematic space-to-target intro flyby
+- [ ] MapLibre minimap, 3D buildings/borders/roads/population — **still not started**, these need offline tile-processing pipelines outside a single session's scope
 
 ## Phase 4 — Location & personalization
 
@@ -74,7 +81,7 @@ Auth is explicitly out of scope per product decision — every Phase 1 auth item
 
 ## Phase 6 — Accessibility & responsive
 
-- [x] Keyboard shortcuts: `L` (layers), `F` (fullscreen), `R` (replay toggle — new), `Esc` (close everything); `B` still unwired (bookmarks' open state isn't lifted to the store)
+- [x] Keyboard shortcuts: `L` (layers), `B` (bookmarks), `F` (fullscreen), `R` (replay toggle), `+`/`-` (zoom), `W`/`A`/`S`/`D` (fly), `Space` (replay play/pause), `Esc` (close everything)
 - [x] Global `focus-visible` ring (all buttons/links/inputs) and `prefers-reduced-motion` handling added in `globals.css`
 - [x] `aria-live`/`role="status"` on WeatherPanel, AirQualityPanel, EventDetailPanel
 - [x] **Partial responsive pass**: below `sm`, the ~8 floating utility buttons collapse into one bottom-sheet-style "More" menu; local-conditions cards become a horizontal scroll strip; event detail becomes a full-width sheet. This is *not* the full per-breakpoint bottom-sheet system from the UI spec — it's a real, working reflow, not the complete spec.
@@ -104,7 +111,6 @@ See [11-roadmap.md](docs/11-roadmap.md).
 ## What's still genuinely blocked (not skipped, actually can't do it here)
 
 - **Vercel Cron / scheduled jobs** — needs an interactive `vercel link`, which this non-interactive environment can't run. This is the one dependency behind: cache pre-warming, a real backfill for Replay/Stats history, and the scheduled CI canary workflow.
-- **Cesium World Terrain** — token is set, just not wired into `Globe.tsx` yet (mechanical, not blocked — just not done).
 - **Full responsive/E2E/Lighthouse/OWASP passes** — these need either a deployed instance, real device testing, or dedicated tooling runs beyond what a code-level pass can honestly claim to complete.
 
 ## Honest summary of what changed this pass

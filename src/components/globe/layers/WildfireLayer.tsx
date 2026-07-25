@@ -1,23 +1,27 @@
 "use client";
 
 import { Cartesian3, Color } from "cesium";
-import { Entity, PointGraphics } from "resium";
+import { CustomDataSource, Entity, PointGraphics } from "resium";
 import { useWildfires } from "@/lib/use-wildfires";
+import { useEntityClustering } from "@/lib/use-entity-clustering";
 import { useUiStore } from "@/lib/store";
 import type { FireDetection } from "@/lib/adapters/firms";
 
 // NASA FIRMS active-fire detections — docs/05-api-integration-guide.md §5.3.
 // Explicitly satellite thermal-anomaly detections, not confirmed wildfires
 // (can include agricultural burning/flares) — surfaced in the detail panel
-// per the FIRMS disclaimer, not overclaimed as "confirmed fire".
+// per the FIRMS disclaimer, not overclaimed as "confirmed fire". Capped at
+// MAX_FIRES (src/lib/adapters/firms.ts) but still dense enough that
+// clustering (useEntityClustering) matters more here than any other layer.
 export function WildfireLayer() {
   const { data } = useWildfires();
   const setSelectedEvent = useUiStore((s) => s.setSelectedEvent);
+  const clustering = useEntityClustering(8);
 
   if (!data) return null;
 
   return (
-    <>
+    <CustomDataSource clustering={clustering}>
       {data.map((fire) => (
         <Entity
           key={`${fire.latitude}-${fire.longitude}-${fire.acquiredAt}`}
@@ -33,7 +37,7 @@ export function WildfireLayer() {
           />
         </Entity>
       ))}
-    </>
+    </CustomDataSource>
   );
 }
 
