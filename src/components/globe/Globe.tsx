@@ -1,8 +1,28 @@
 "use client";
 
-// Side-effect import must run before any other cesium/resium import — see
-// src/lib/cesium-base-url.ts.
-import "@/lib/cesium-base-url";
+// Cesium needs window.CESIUM_BASE_URL to find its Workers/Assets/ThirdParty/
+// Widgets (copied to public/cesium by scripts/copy-cesium-assets.mjs) — read
+// lazily inside Cesium's own getCesiumBaseUrl(), only when it first resolves
+// a resource URL at runtime, not synchronously at module-import time (traced
+// into node_modules/cesium/Build/CesiumUnminified/index.js to confirm), so
+// import order relative to `cesium` doesn't matter. This used to live in its
+// own side-effect-only module (`import "@/lib/cesium-base-url"`), which
+// `next build`'s tree-shaking silently dropped in production — confirmed by
+// grepping the deployed bundle for the string and finding it nowhere, which
+// left Cesium unable to find its own Workers and made every worker spawn
+// fail instantly with "Connection closed", stuck forever on "Loading
+// globe…". Inlined here instead, in a module proven not to be eliminated
+// since it renders real UI.
+declare global {
+  interface Window {
+    CESIUM_BASE_URL?: string;
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.CESIUM_BASE_URL = "/cesium/";
+}
+
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
 // Named imports (not `import * as Cesium`) — Cesium's own bundle-size
