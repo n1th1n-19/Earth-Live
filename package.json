@@ -6,7 +6,7 @@
     "predev": "node scripts/copy-cesium-assets.mjs",
     "dev": "next dev -p 3081",
     "prebuild": "node scripts/copy-cesium-assets.mjs",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
