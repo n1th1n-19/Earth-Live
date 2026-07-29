@@ -2,17 +2,19 @@ import { withSentryConfig } from "@sentry/nextjs";
 import path from "node:path";
 import type { NextConfig } from "next";
 
-// docs/10-security-guide.md §10.3. Imagery hosts are allowlisted because
-// the globe fetches tiles client-side directly (not proxied): OpenStreetMap
-// as the keyless fallback, and — when NEXT_PUBLIC_CESIUM_ION_TOKEN is set —
-// Cesium ion's world imagery, which actually proxies to Bing Maps Aerial.
-// Confirmed via a real call to Cesium ion's asset endpoint that tile bytes
-// come from *.virtualearth.net (Bing's CDN, load-balanced across several
-// subdomains, not one fixed host) while *.cesium.com serves ion's own
-// API/attribution assets. This was the actual cause of the globe not
-// rendering after switching to satellite imagery — CSP silently blocked
-// every tile request in production (dev was unaffected since CSP is
-// prod-only). `unsafe-inline` on style-src is needed for Cesium's own
+// docs/10-security-guide.md §10.3. Imagery/terrain hosts are allowlisted
+// because the globe fetches tiles client-side directly (not proxied):
+// OpenStreetMap as the keyless fallback, and — when
+// NEXT_PUBLIC_CESIUM_ION_TOKEN is set — Cesium ion's world imagery (proxies
+// to Bing Maps Aerial, *.virtualearth.net), Cesium World Terrain, and NASA
+// GIBS (true-color clouds + Black Marble night lights). Each host below was
+// hit directly (curl against the real ion asset endpoints / GIBS tiles)
+// before being added — this file has twice silently blocked tiles in
+// production from an assumed-but-unverified host, so nothing goes in on
+// guesswork anymore. `assets.ion.cesium.com` (terrain) is a *different* host
+// than `api.cesium.com`/`assets.cesium.com` — CSP wildcards don't span two
+// subdomain levels, so `*.cesium.com` alone does not cover it.
+// `unsafe-inline` on style-src is needed for Cesium's own
 // widget/credit-container styles, which it injects inline. No CORS headers
 // are added anywhere: Route Handlers default to same-origin-only unless
 // explicitly opened up, which is the locked-down state
@@ -21,9 +23,9 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.virtualearth.net https://*.cesium.com",
+  "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.virtualearth.net https://*.cesium.com https://*.ion.cesium.com https://gibs.earthdata.nasa.gov",
   "font-src 'self' data:",
-  "connect-src 'self' https://tile.openstreetmap.org https://*.virtualearth.net https://*.cesium.com",
+  "connect-src 'self' https://tile.openstreetmap.org https://*.virtualearth.net https://*.cesium.com https://*.ion.cesium.com https://gibs.earthdata.nasa.gov",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

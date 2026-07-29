@@ -3,13 +3,48 @@ import { cacheAside } from "@/lib/cache";
 import { logApiCall } from "@/lib/api-log";
 
 // OpenSky Network — docs/05-api-integration-guide.md §5.6.
-// Anonymous access only (no OPENSKY_CLIENT_ID/SECRET configured here) — the
-// anonymous quota (~400 credits/day) is far tighter than a registered
-// account's (~4000/day), so this uses a more conservative 45s cache TTL than
-// the 10s documented for a registered account. Tighten once OpenSky OAuth
-// credentials are provisioned (docs/05-api-integration-guide.md §5.6).
-const CACHE_TTL_SECONDS = 45;
+// Registered OAuth2 client (~4000 credits/day) when OPENSKY_CLIENT_ID/SECRET
+// are set, falling back to the anonymous ~400/day tier otherwise — verified
+// live 2026-07-25: an authenticated request returned
+// x-rate-limit-remaining: 3996, where the anonymous tier was already at
+// 429 "Too many requests" (~20h until its daily reset). Cache TTL tightens to
+// the documented 10s for a registered client, 45s anonymous.
+const TOKEN_URL =
+  "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token";
+const CLIENT_ID = process.env.OPENSKY_CLIENT_ID;
+const CLIENT_SECRET = process.env.OPENSKY_CLIENT_SECRET;
+
+const CACHE_TTL_SECONDS = CLIENT_ID && CLIENT_SECRET ? 10 : 45;
 const MAX_FLIGHTS = 400; // keeps the globe renderable until marker clustering (Phase 5) ships
+
+let tokenCache: { accessToken: string; expiresAt: number } | null = null;
+
+// OpenSky's OAuth2 client-credentials flow (Keycloak-backed) — token is
+// cached in memory and refreshed a minute before its real expiry (tokens
+// verified live to last 1800s) so a request never races an expired token.
+async function getAccessToken(): Promise<string | null> {
+  if (!CLIENT_ID || !CLIENT_SECRET) return null;
+  if (tokenCache && tokenCache.expiresAt > Date.now()) return tokenCache.accessToken;
+
+  const response = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+    }),
+  });
+  if (!response.ok) throw new Error(`OpenSky token request failed with status ${response.status}`);
+
+  const json = await response.json();
+  const { access_token: accessToken, expires_in: expiresInSeconds } = json as {
+    access_token: string;
+    expires_in: number;
+  };
+  tokenCache = { accessToken, expiresAt: Date.now() + (expiresInSeconds - 60) * 1000 };
+  return accessToken;
+}
 
 // OpenSky's state vector is a positional array, not an object — index meanings
 // per https://opensky-network.org/apidoc/rest.html#all-state-vectors.
@@ -56,8 +91,10 @@ export async function fetchFlights(): Promise<Flight[]> {
 
   try {
     const { value, cacheHit } = await cacheAside("opensky:states:all", CACHE_TTL_SECONDS, async () => {
+      const accessToken = await getAccessToken();
       const response = await fetch("https://opensky-network.org/api/states/all", {
         next: { revalidate: 0 },
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
       });
       statusCode = response.status;
       if (!response.ok) throw new Error(`OpenSky request failed with status ${response.status}`);

@@ -7,7 +7,7 @@ import { persist } from "zustand/middleware";
 // (liveness badge is only honest if the layer actually does something).
 // Clouds/night-lights/borders/etc. from the full docs/02 layer table are not
 // implemented yet — deliberately not exposed as togglable here.
-export type LayerId = "weather" | "earthquakes" | "flights" | "iss" | "wildfires";
+export type LayerId = "weather" | "earthquakes" | "flights" | "iss" | "wildfires" | "clouds";
 
 export interface SelectedEvent {
   kind: "earthquake" | "flight" | "iss" | "satellite" | "wildfire";
@@ -46,6 +46,11 @@ interface UiState {
 
   units: Units;
   setUnits: (units: Units) => void;
+
+  // Earthquake layer render mode: individual clustered points vs a density
+  // heatmap of the same live/replay data — a view toggle, not a data layer.
+  earthquakeHeatmap: boolean;
+  setEarthquakeHeatmap: (on: boolean) => void;
 
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
@@ -115,6 +120,9 @@ export const useUiStore = create<UiState>()(
 
       units: "metric",
       setUnits: (units) => set({ units }),
+
+      earthquakeHeatmap: false,
+      setEarthquakeHeatmap: (on) => set({ earthquakeHeatmap: on }),
 
       commandPaletteOpen: false,
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),

@@ -12,15 +12,18 @@ const LAYERS: { id: LayerId; label: string; category: string; cadence: string }[
   { id: "wildfires", label: "Wildfires", category: "Geological", cadence: "~3 hr" },
   { id: "flights", label: "Flights", category: "Transportation", cadence: "~45 s" },
   { id: "iss", label: "ISS", category: "Space", cadence: "~2 s" },
+  { id: "clouds", label: "Clouds", category: "Visual", cadence: "~1 day" },
 ];
 
-const CATEGORIES = ["Weather", "Geological", "Transportation", "Space"];
+const CATEGORIES = ["Weather", "Geological", "Transportation", "Space", "Visual"];
 
 export function LayerPanel() {
   const open = useUiStore((s) => s.layerPanelOpen);
   const setOpen = useUiStore((s) => s.setLayerPanelOpen);
   const activeLayers = useUiStore((s) => s.activeLayers);
   const toggleLayer = useUiStore((s) => s.toggleLayer);
+  const heatmap = useUiStore((s) => s.earthquakeHeatmap);
+  const setHeatmap = useUiStore((s) => s.setEarthquakeHeatmap);
 
   if (!open) {
     return (
@@ -65,6 +68,15 @@ export function LayerPanel() {
                 </button>
               );
             })}
+            {category === "Geological" && activeLayers.includes("earthquakes") && (
+              <button
+                onClick={() => setHeatmap(!heatmap)}
+                className="flex w-full items-center justify-between rounded-lg py-1.5 pl-6 pr-2 hover:bg-white/5"
+              >
+                <span className="text-xs text-neutral-400">Heatmap view</span>
+                <span className={`h-1.5 w-1.5 rounded-full ${heatmap ? "bg-emerald-400" : "bg-neutral-600"}`} />
+              </button>
+            )}
           </div>
         );
       })}

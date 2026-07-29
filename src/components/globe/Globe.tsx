@@ -15,20 +15,31 @@ import {
   Cartographic,
   Color,
   createWorldImageryAsync,
+  createWorldTerrainAsync,
   EllipsoidTerrainProvider,
+  GeographicTilingScheme,
   ImageryLayer,
   Ion,
   IonWorldImageryStyle,
   Math as CesiumMath,
   OpenStreetMapImageryProvider,
+  Rectangle,
+  WebMapTileServiceImageryProvider,
 } from "cesium";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Entity, PointGraphics, PolylineGraphics, Viewer } from "resium";
+import {
+  Entity,
+  ImageryLayer as ResiumImageryLayer,
+  PointGraphics,
+  PolylineGraphics,
+  Viewer,
+} from "resium";
 import type { Viewer as CesiumViewer } from "cesium";
 import { useUiStore } from "@/lib/store";
 import { totalPathDistanceKm, type LatLon } from "@/lib/geo-math";
 import { formatDistanceKm } from "@/lib/units";
 import { FloatingControls } from "@/components/globe/FloatingControls";
+import { AuroraLayer } from "@/components/globe/layers/AuroraLayer";
 import { EarthquakeLayer } from "@/components/globe/layers/EarthquakeLayer";
 import { FlightsLayer } from "@/components/globe/layers/FlightsLayer";
 import { IssLayer } from "@/components/globe/layers/IssLayer";
@@ -56,6 +67,21 @@ if (ionToken) {
 // this context" once a second Viewer's context tries to reuse it. It's
 // created fresh per Globe instance below instead.
 const ellipsoidTerrain = new EllipsoidTerrainProvider();
+
+// NASA GIBS — keyless, free, no ion token needed (independent of the
+// imagery/terrain ion gating above). This file has already shipped two
+// production bugs from unverified tile-host/param assumptions (see the CSP
+// comment in next.config.ts), so every value below came from a real request,
+// not the docs: gibs.earthdata.nasa.gov serves both layers directly (no
+// redirect); tiles are 512x512 (Cesium defaults to 256); true-color 250m
+// tops out at zoom 8 and city-lights 500m at zoom 7 (both 400 past that).
+// "Yesterday" for true-color because near-real-time processing lags behind
+// "today" by up to a day — verified live on 2026-07-25.
+function gibsDateISO(daysAgo: number): string {
+  return new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+const GIBS_RECTANGLE = Rectangle.fromDegrees(-180, -90, 180, 90);
 
 interface GlobeProps {
   latitude: number | null;
@@ -95,6 +121,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   }, []);
 
   const activeLayers = useUiStore((s) => s.activeLayers);
+  const showClouds = activeLayers.includes("clouds");
   const units = useUiStore((s) => s.units);
   const setCameraPosition = useUiStore((s) => s.setCameraPosition);
   const setCursorCoordinates = useUiStore((s) => s.setCursorCoordinates);
@@ -120,12 +147,80 @@ export function Globe({ latitude, longitude }: GlobeProps) {
     [],
   );
 
+  // Real relief instead of a flat sphere, when an ion token is configured —
+  // docs/05-api-integration-guide.md §5.9. Falls back to the flat ellipsoid
+  // (module-level, see comment above) rather than failing the whole globe.
+  const worldTerrainProvider = useMemo(
+    () =>
+      ionToken
+        ? createWorldTerrainAsync({ requestVertexNormals: true, requestWaterMask: true })
+        : ellipsoidTerrain,
+    [],
+  );
+
+  // Real satellite true-color imagery, semi-transparent overlay on top of
+  // the (cloud-free-by-design) base layer — actual visible cloud cover, not
+  // an isolated cloud mask (GIBS doesn't offer one), so land/ocean color
+  // shows through at this alpha. Off by default (toggled via the "clouds"
+  // layer) since it's an extra ~1-day-old tile fetch on top of the base map.
+  const cloudsProvider = useMemo(
+    () =>
+      new WebMapTileServiceImageryProvider({
+        url: `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${gibsDateISO(1)}/250m/{TileMatrix}/{TileRow}/{TileCol}.jpg`,
+        layer: "VIIRS_SNPP_CorrectedReflectance_TrueColor",
+        style: "default",
+        format: "image/jpeg",
+        tileMatrixSetID: "250m",
+        tileWidth: 512,
+        tileHeight: 512,
+        maximumLevel: 8,
+        tilingScheme: new GeographicTilingScheme(),
+        rectangle: GIBS_RECTANGLE,
+        credit: "NASA GIBS / VIIRS (true color, ~1 day lag)",
+      }),
+    [],
+  );
+
+  // NASA Black Marble (VIIRS City Lights 2012) — a static dataset, not live,
+  // but cheap and always on: Cesium's built-in dayAlpha/nightAlpha blends it
+  // in only on the night side, computed from the same real sun position the
+  // enableLighting terminator below already uses. No manual terminator math.
+  // colorToAlpha punches out the image's black background (most of every
+  // tile — no city, no lights) so only actual lit pixels draw; without it,
+  // nightAlpha=1 draws the *whole* near-black image fully opaque over the
+  // entire night hemisphere, hiding the real base imagery underneath it —
+  // exactly what "half the Earth isn't loading" turned out to be.
+  const nightLightsProvider = useMemo(
+    () =>
+      new WebMapTileServiceImageryProvider({
+        url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_CityLights_2012/default/2012-01-01/500m/{TileMatrix}/{TileRow}/{TileCol}.jpg",
+        layer: "VIIRS_CityLights_2012",
+        style: "default",
+        format: "image/jpeg",
+        tileMatrixSetID: "500m",
+        tileWidth: 512,
+        tileHeight: 512,
+        maximumLevel: 7,
+        tilingScheme: new GeographicTilingScheme(),
+        rectangle: GIBS_RECTANGLE,
+        credit: "NASA Black Marble (VIIRS City Lights 2012)",
+      }),
+    [],
+  );
+
   // Real-time day/night terminator (FR-1) — Cesium computes this from actual
-  // sun position once lighting is enabled; no custom math needed.
+  // sun position once lighting is enabled; no custom math needed. Atmosphere
+  // shift tuned for a richer sky halo than Cesium's flatter defaults.
   useEffect(() => {
     const viewer = getLiveViewer();
     if (viewer) {
       viewer.scene.globe.enableLighting = true;
+      const { skyAtmosphere } = viewer.scene;
+      if (skyAtmosphere) {
+        skyAtmosphere.hueShift = -0.02;
+        skyAtmosphere.saturationShift = 0.15;
+        skyAtmosphere.brightnessShift = -0.1;
+      }
     }
   }, []);
 
@@ -151,14 +246,20 @@ export function Globe({ latitude, longitude }: GlobeProps) {
     };
   }, [setCameraPosition]);
 
+  // Cinematic intro (FR-1 polish): snap instantly to a far-out space view
+  // above the target, then fly down — reads as "arriving at Earth" rather
+  // than an instant cut straight to street-ish altitude.
   useEffect(() => {
     const viewer = getLiveViewer();
     if (!viewer || latitude == null || longitude == null || hasFlownRef.current) return;
 
     hasFlownRef.current = true;
+    viewer.camera.setView({
+      destination: Cartesian3.fromDegrees(longitude, latitude, 20_000_000),
+    });
     viewer.camera.flyTo({
       destination: Cartesian3.fromDegrees(longitude, latitude, 1_500_000),
-      duration: 2,
+      duration: 3,
     });
   }, [latitude, longitude]);
 
@@ -302,7 +403,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
         ref={viewerRef}
         full
         baseLayer={baseImageryLayer}
-        terrainProvider={ellipsoidTerrain}
+        terrainProvider={worldTerrainProvider}
         contextOptions={contextOptions}
         creditContainer={hiddenCreditsContainer}
         animation={false}
@@ -318,6 +419,16 @@ export function Globe({ latitude, longitude }: GlobeProps) {
         onMouseMove={handleMouseMove}
         onClick={handleClick}
       >
+        <ResiumImageryLayer
+          imageryProvider={nightLightsProvider}
+          dayAlpha={0}
+          nightAlpha={1}
+          colorToAlpha={Color.BLACK}
+          colorToAlphaThreshold={0.2}
+        />
+        {showClouds && <ResiumImageryLayer imageryProvider={cloudsProvider} alpha={0.55} />}
+        <AuroraLayer />
+
         {activeLayers.includes("earthquakes") && <EarthquakeLayer />}
         {activeLayers.includes("flights") && <FlightsLayer />}
         {activeLayers.includes("iss") && <IssLayer />}
