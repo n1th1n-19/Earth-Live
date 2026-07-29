@@ -46,18 +46,18 @@ Auth is explicitly out of scope per product decision — every Phase 1 auth item
 ## Phase 3 — Globe core
 
 - [x] CesiumJS + Resium, code-split
-- [x] **Cesium World Terrain** — wired via `createWorldTerrainAsync` (vertex normals + water mask) when `NEXT_PUBLIC_CESIUM_ION_TOKEN` is set, falling back to `EllipsoidTerrainProvider`. Real terrain tiles confirmed live from `assets.ion.cesium.com` (a different host than `api.cesium.com` — added to CSP separately, `*.cesium.com` doesn't cover it).
-- [x] OSM imagery, real-time lighting, camera + fly-to, measurement tool, screenshot/fullscreen, WASD fly controls
+- [x] **Wireframe globe (current look)** — black `globe.baseColor`, no imagery/terrain provider (`EllipsoidTerrainProvider`, flat), real country borders (`<GeoJsonDataSource>`, Natural Earth 1:110m, bundled static at `public/data/ne_110m_admin_0_countries.geojson`) and a generated lat/long graticule (`src/lib/graticule.ts`), both as glowing lines (`PolylineGlowMaterialProperty`). Replaces the photoreal build below by explicit request — see git history for that version if it's ever wanted back.
+- [x] ~~Cesium World Terrain, Bing/OSM base imagery, GIBS true-color cloud overlay, GIBS Black Marble night-lights overlay, `skyAtmosphere` hue/saturation/brightness tuning~~ — **removed**, superseded by the wireframe globe above. `NEXT_PUBLIC_CESIUM_ION_TOKEN` is now unused (left in `.env.example`, harmless).
+- [x] **Icon markers** — earthquakes/flights/ISS/wildfires render as representative icons (`src/lib/icon-billboard.ts`, lucide-react rendered to an SVG data-URI, cached per icon type, tinted per-entity via Cesium's `BillboardGraphics.color`) instead of plain colored dots: activity/plane/satellite/flame. Flights rotate to match real `headingDeg` via `alignedAxis`/`rotation` — real data driving a real visual, not decorative.
+- [x] Real-time lighting, camera + fly-to, measurement tool, screenshot/fullscreen, WASD fly controls
 - [x] **Wildfire markers**, capped at 1000 (`MAX_FIRES` in `firms.ts` — global VIIRS 24h feed runs 30k-100k+ rows, was crashing the tab before this cap)
 - [x] **Real unit conversion** (metric/imperial) applied to weather, measurement tool, flight altitude/speed — a units toggle that didn't change any number would be fake, so this was built as a real, shared `src/lib/units.ts`
-- [x] **Cloud overlay** — NASA GIBS true-color VIIRS imagery (real satellite pixels, ~1 day lag; GIBS has no isolated cloud-mask layer), toggleable, off by default
-- [x] **Night-lights overlay** — NASA Black Marble (VIIRS City Lights 2012, static dataset) via Cesium's built-in `dayAlpha`/`nightAlpha`, always on, blended in only on the real night side
-- [x] **Marker clustering** — earthquakes/flights/wildfires now render inside a `<CustomDataSource clustering={...}>` (`src/lib/use-entity-clustering.ts`) instead of a flat `<Entity>` list
+- [x] **Marker clustering** — earthquakes/flights/wildfires now render inside a `<CustomDataSource clustering={...}>` (`src/lib/use-entity-clustering.ts`) instead of a flat `<Entity>` list; clusters billboards the same as it clustered points before
 - [x] **Earthquake heatmap mode** — toggle in the layer panel; canvas-generated additive-blob density map (not a real KDE), same "approximation, disclosed" spirit as the FIRMS caveat
 - [x] **Flight trails** — short fading polyline per aircraft, built from real positions accumulated client-side across polls (OpenSky's free tier has no historical track endpoint)
 - [x] **Aurora oval** — approximate geomagnetic-pole ellipses, always on, sized/gated by the real live Kp index (`/api/space-weather`) — not the real OVATION model, disclosed as such
-- [x] Atmosphere tuned (`skyAtmosphere` hue/saturation/brightness shift) + cinematic space-to-target intro flyby
-- [ ] MapLibre minimap, 3D buildings/borders/roads/population — **still not started**, these need offline tile-processing pipelines outside a single session's scope
+- [x] Cinematic space-to-target intro flyby
+- [ ] MapLibre minimap, 3D buildings/roads/population — **still not started**, these need offline tile-processing pipelines outside a single session's scope
 
 ## Phase 4 — Location & personalization
 

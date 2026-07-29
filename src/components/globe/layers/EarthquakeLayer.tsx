@@ -2,10 +2,11 @@
 
 import { useMemo } from "react";
 import { Cartesian3, Color, Rectangle, SingleTileImageryProvider } from "cesium";
-import { CustomDataSource, Entity, ImageryLayer as ResiumImageryLayer, PointGraphics } from "resium";
+import { BillboardGraphics, CustomDataSource, Entity, ImageryLayer as ResiumImageryLayer } from "resium";
 import { useEarthquakes } from "@/lib/use-earthquakes";
 import { useEarthquakeHistory } from "@/lib/use-earthquake-history";
 import { useEntityClustering } from "@/lib/use-entity-clustering";
+import { getIconDataUri } from "@/lib/icon-billboard";
 import { useUiStore } from "@/lib/store";
 import type { Earthquake } from "@/lib/adapters/usgs-earthquakes";
 
@@ -89,11 +90,11 @@ export function EarthquakeLayer() {
           name={quake.place ?? "Earthquake"}
           onClick={() => setSelectedEvent(toSelectedEvent(quake))}
         >
-          <PointGraphics
-            pixelSize={sizeFor(quake.magnitude)}
+          <BillboardGraphics
+            image={getIconDataUri("activity")}
             color={colorFor(quake.magnitude)}
-            outlineColor={Color.BLACK}
-            outlineWidth={1}
+            width={sizeFor(quake.magnitude)}
+            height={sizeFor(quake.magnitude)}
           />
         </Entity>
       ))}

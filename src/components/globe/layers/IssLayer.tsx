@@ -2,9 +2,10 @@
 
 import { Cartesian2, Cartesian3, Color } from "cesium";
 import { useEffect, useState } from "react";
-import { Entity, LabelGraphics, PointGraphics } from "resium";
+import { BillboardGraphics, Entity, LabelGraphics } from "resium";
 import { useSatelliteGroup } from "@/lib/use-satellites";
 import { propagateTle } from "@/lib/satellite-propagation";
+import { getIconDataUri } from "@/lib/icon-billboard";
 
 // ISS position, propagated client-side from CelesTrak TLEs via SGP4 —
 // docs/05-api-integration-guide.md §5.4. Updated every 2s (real orbital
@@ -40,7 +41,7 @@ export function IssLayer() {
 
   return (
     <Entity position={position} name="International Space Station">
-      <PointGraphics pixelSize={10} color={Color.WHITE} outlineColor={Color.CYAN} outlineWidth={2} />
+      <BillboardGraphics image={getIconDataUri("satellite")} color={Color.WHITE} width={22} height={22} />
       <LabelGraphics
         text="ISS"
         font="12px monospace"

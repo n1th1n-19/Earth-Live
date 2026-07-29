@@ -7,7 +7,7 @@ import { persist } from "zustand/middleware";
 // (liveness badge is only honest if the layer actually does something).
 // Clouds/night-lights/borders/etc. from the full docs/02 layer table are not
 // implemented yet — deliberately not exposed as togglable here.
-export type LayerId = "weather" | "earthquakes" | "flights" | "iss" | "wildfires" | "clouds";
+export type LayerId = "weather" | "earthquakes" | "flights" | "iss" | "wildfires";
 
 export interface SelectedEvent {
   kind: "earthquake" | "flight" | "iss" | "satellite" | "wildfire";

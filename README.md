@@ -40,7 +40,7 @@ All documented in [`.env.example`](.env.example). Nothing is required to run the
 | `NASA_API_KEY` | Space weather notifications | `api.nasa.gov` |
 | `OPENAQ_API_KEY` | Air quality panel | `explore.openaq.org` |
 | `GEONAMES_USERNAME` | Timezone lookup | `geonames.org` (enable "Free Web Services" in account settings) |
-| `NEXT_PUBLIC_CESIUM_ION_TOKEN` | Real terrain (optional — globe defaults to a flat ellipsoid without it) | `ion.cesium.com` |
+| `NEXT_PUBLIC_CESIUM_ION_TOKEN` | Currently unused — the globe is a wireframe look (no imagery/terrain provider); kept in `.env.example` in case that changes | `ion.cesium.com` |
 | `SENTRY_DSN` / `SENTRY_AUTH_TOKEN` | Error tracking (optional) | `sentry.io` |
 
 Auth env vars exist in `.env.example` for schema completeness but auth is **out of scope for this build** — the whole app works anonymously.

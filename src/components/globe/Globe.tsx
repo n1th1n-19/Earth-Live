@@ -34,30 +34,17 @@ import {
   Cartesian3,
   Cartographic,
   Color,
-  createWorldImageryAsync,
-  createWorldTerrainAsync,
   EllipsoidTerrainProvider,
-  GeographicTilingScheme,
-  ImageryLayer,
-  Ion,
-  IonWorldImageryStyle,
   Math as CesiumMath,
-  OpenStreetMapImageryProvider,
-  Rectangle,
-  WebMapTileServiceImageryProvider,
+  PolylineGlowMaterialProperty,
 } from "cesium";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Entity,
-  ImageryLayer as ResiumImageryLayer,
-  PointGraphics,
-  PolylineGraphics,
-  Viewer,
-} from "resium";
+import { Entity, GeoJsonDataSource, PointGraphics, PolylineGraphics, Viewer } from "resium";
 import type { Viewer as CesiumViewer } from "cesium";
 import { useUiStore } from "@/lib/store";
 import { totalPathDistanceKm, type LatLon } from "@/lib/geo-math";
 import { formatDistanceKm } from "@/lib/units";
+import { buildGraticulePositions } from "@/lib/graticule";
 import { FloatingControls } from "@/components/globe/FloatingControls";
 import { AuroraLayer } from "@/components/globe/layers/AuroraLayer";
 import { EarthquakeLayer } from "@/components/globe/layers/EarthquakeLayer";
@@ -68,40 +55,23 @@ import { WildfireLayer } from "@/components/globe/layers/WildfireLayer";
 // Primary globe engine per docs/03-architecture.md §3.2: CesiumJS, chosen for
 // its native WGS84 globe, real-time sun/lighting, and terrain streaming.
 //
-// Base imagery is satellite (Cesium ion's world imagery, Bing Maps Aerial —
-// free ion tier) when NEXT_PUBLIC_CESIUM_ION_TOKEN is configured, falling
-// back to free OpenStreetMap raster tiles (no key, attribution required —
-// docs/05-api-integration-guide.md §5.5) if it isn't. Terrain is still the
-// default ellipsoid regardless — that's a separate swap
-// (docs/05-api-integration-guide.md §5.9), not requested here.
-const ionToken = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
-if (ionToken) {
-  Ion.defaultAccessToken = ionToken;
-}
-
+// Wireframe look: a flat black globe with no imagery, real country borders
+// (Natural Earth 1:110m, public domain — public/data/ne_110m_admin_0_countries.geojson,
+// bundled static rather than fetched from GitHub at runtime) and a generated
+// lat/long graticule (src/lib/graticule.ts) as glowing lines. No ion token,
+// no photoreal imagery/terrain — that whole path (Bing aerial, real terrain
+// relief, GIBS clouds/night-lights) was removed in favor of this; see git
+// history and TODO.md if it's ever wanted back.
+//
 // EllipsoidTerrainProvider is stateless (pure math, no GPU resources) so a
-// module-level singleton is fine. The imagery layer is NOT — Cesium caches
-// WebGL textures inside it that are bound to whichever Viewer/context last
-// used it, so sharing one instance across remounts (React Fast Refresh, a
-// StrictMode double-mount) throws "bindTexture: object does not belong to
-// this context" once a second Viewer's context tries to reuse it. It's
-// created fresh per Globe instance below instead.
+// module-level singleton is fine — same flat sphere the wireframe reference
+// image shows, no relief needed.
 const ellipsoidTerrain = new EllipsoidTerrainProvider();
 
-// NASA GIBS — keyless, free, no ion token needed (independent of the
-// imagery/terrain ion gating above). This file has already shipped two
-// production bugs from unverified tile-host/param assumptions (see the CSP
-// comment in next.config.ts), so every value below came from a real request,
-// not the docs: gibs.earthdata.nasa.gov serves both layers directly (no
-// redirect); tiles are 512x512 (Cesium defaults to 256); true-color 250m
-// tops out at zoom 8 and city-lights 500m at zoom 7 (both 400 past that).
-// "Yesterday" for true-color because near-real-time processing lags behind
-// "today" by up to a day — verified live on 2026-07-25.
-function gibsDateISO(daysAgo: number): string {
-  return new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
-const GIBS_RECTANGLE = Rectangle.fromDegrees(-180, -90, 180, 90);
+const GRATICULE_MATERIAL = new PolylineGlowMaterialProperty({
+  glowPower: 0.15,
+  color: Color.CYAN.withAlpha(0.4),
+});
 
 interface GlobeProps {
   latitude: number | null;
@@ -141,7 +111,6 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   }, []);
 
   const activeLayers = useUiStore((s) => s.activeLayers);
-  const showClouds = activeLayers.includes("clouds");
   const units = useUiStore((s) => s.units);
   const setCameraPosition = useUiStore((s) => s.setCameraPosition);
   const setCursorCoordinates = useUiStore((s) => s.setCursorCoordinates);
@@ -151,97 +120,37 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   const [measuring, setMeasuring] = useState(false);
   const [measurePoints, setMeasurePoints] = useState<LatLon[]>([]);
 
-  // Fresh per mount — see the comment on `ellipsoidTerrain` above. Satellite
-  // imagery via ion when a token is configured; ImageryLayer.fromProviderAsync
-  // accepts the provider promise directly, no need to await it here.
-  const baseImageryLayer = useMemo(
-    () =>
-      ionToken
-        ? ImageryLayer.fromProviderAsync(createWorldImageryAsync({ style: IonWorldImageryStyle.AERIAL }))
-        : new ImageryLayer(
-            new OpenStreetMapImageryProvider({
-              url: "https://tile.openstreetmap.org/",
-              credit: "© OpenStreetMap contributors",
-            }),
-          ),
-    [],
-  );
-
-  // Real relief instead of a flat sphere, when an ion token is configured —
-  // docs/05-api-integration-guide.md §5.9. Falls back to the flat ellipsoid
-  // (module-level, see comment above) rather than failing the whole globe.
-  const worldTerrainProvider = useMemo(
-    () =>
-      ionToken
-        ? createWorldTerrainAsync({ requestVertexNormals: true, requestWaterMask: true })
-        : ellipsoidTerrain,
-    [],
-  );
-
-  // Real satellite true-color imagery, semi-transparent overlay on top of
-  // the (cloud-free-by-design) base layer — actual visible cloud cover, not
-  // an isolated cloud mask (GIBS doesn't offer one), so land/ocean color
-  // shows through at this alpha. Off by default (toggled via the "clouds"
-  // layer) since it's an extra ~1-day-old tile fetch on top of the base map.
-  const cloudsProvider = useMemo(
-    () =>
-      new WebMapTileServiceImageryProvider({
-        url: `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${gibsDateISO(1)}/250m/{TileMatrix}/{TileRow}/{TileCol}.jpg`,
-        layer: "VIIRS_SNPP_CorrectedReflectance_TrueColor",
-        style: "default",
-        format: "image/jpeg",
-        tileMatrixSetID: "250m",
-        tileWidth: 512,
-        tileHeight: 512,
-        maximumLevel: 8,
-        tilingScheme: new GeographicTilingScheme(),
-        rectangle: GIBS_RECTANGLE,
-        credit: "NASA GIBS / VIIRS (true color, ~1 day lag)",
-      }),
-    [],
-  );
-
-  // NASA Black Marble (VIIRS City Lights 2012) — a static dataset, not live,
-  // but cheap and always on: Cesium's built-in dayAlpha/nightAlpha blends it
-  // in only on the night side, computed from the same real sun position the
-  // enableLighting terminator below already uses. No manual terminator math.
-  // colorToAlpha punches out the image's black background (most of every
-  // tile — no city, no lights) so only actual lit pixels draw; without it,
-  // nightAlpha=1 draws the *whole* near-black image fully opaque over the
-  // entire night hemisphere, hiding the real base imagery underneath it —
-  // exactly what "half the Earth isn't loading" turned out to be.
-  const nightLightsProvider = useMemo(
-    () =>
-      new WebMapTileServiceImageryProvider({
-        url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_CityLights_2012/default/2012-01-01/500m/{TileMatrix}/{TileRow}/{TileCol}.jpg",
-        layer: "VIIRS_CityLights_2012",
-        style: "default",
-        format: "image/jpeg",
-        tileMatrixSetID: "500m",
-        tileWidth: 512,
-        tileHeight: 512,
-        maximumLevel: 7,
-        tilingScheme: new GeographicTilingScheme(),
-        rectangle: GIBS_RECTANGLE,
-        credit: "NASA Black Marble (VIIRS City Lights 2012)",
-      }),
-    [],
-  );
+  // Real computed lat/long grid lines, not a texture — src/lib/graticule.ts.
+  const graticuleLines = useMemo(() => buildGraticulePositions(), []);
 
   // Real-time day/night terminator (FR-1) — Cesium computes this from actual
-  // sun position once lighting is enabled; no custom math needed. Atmosphere
-  // shift tuned for a richer sky halo than Cesium's flatter defaults.
+  // sun position once lighting is enabled; no custom math needed. Kept even
+  // without imagery: it's real data, not photoreal-specific. baseColor is
+  // the wireframe look's black globe surface.
+  //
+  // Resium's async Viewer construction (queueMicrotask + await inside
+  // mount()) isn't guaranteed to have populated viewerRef.current by the
+  // time this effect's single [] pass runs — confirmed live: the globe
+  // rendered Cesium's default blue, meaning this silently no-op'd on first
+  // mount. Unlike the moveEnd/cinematic-flyby effects below, this one has no
+  // prop (like latitude/longitude) that changes after mount to give it a
+  // natural second attempt, so it needs its own retry until the ref is live.
   useEffect(() => {
-    const viewer = getLiveViewer();
-    if (viewer) {
-      viewer.scene.globe.enableLighting = true;
-      const { skyAtmosphere } = viewer.scene;
-      if (skyAtmosphere) {
-        skyAtmosphere.hueShift = -0.02;
-        skyAtmosphere.saturationShift = 0.15;
-        skyAtmosphere.brightnessShift = -0.1;
+    let cancelled = false;
+    function apply() {
+      if (cancelled) return;
+      const viewer = getLiveViewer();
+      if (!viewer) {
+        requestAnimationFrame(apply);
+        return;
       }
+      viewer.scene.globe.enableLighting = true;
+      viewer.scene.globe.baseColor = Color.BLACK;
     }
+    apply();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // FR-25/26: sample camera pose on moveEnd for share-URL encoding
@@ -412,7 +321,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   // That's what "<Viewer> is recreated because..." in the console meant, and
   // why zoomIn/zoomOut/recenter/screenshot then threw on a mid-teardown
   // cesiumElement. Same stable-reference treatment as hiddenCreditsContainer
-  // and baseImageryLayer above.
+  // above.
   const contextOptions = useMemo(() => ({ webgl: { preserveDrawingBuffer: true } }), []);
 
   const measureDistanceKm = totalPathDistanceKm(measurePoints);
@@ -422,8 +331,8 @@ export function Globe({ latitude, longitude }: GlobeProps) {
       <Viewer
         ref={viewerRef}
         full
-        baseLayer={baseImageryLayer}
-        terrainProvider={worldTerrainProvider}
+        baseLayer={false}
+        terrainProvider={ellipsoidTerrain}
         contextOptions={contextOptions}
         creditContainer={hiddenCreditsContainer}
         animation={false}
@@ -439,14 +348,17 @@ export function Globe({ latitude, longitude }: GlobeProps) {
         onMouseMove={handleMouseMove}
         onClick={handleClick}
       >
-        <ResiumImageryLayer
-          imageryProvider={nightLightsProvider}
-          dayAlpha={0}
-          nightAlpha={1}
-          colorToAlpha={Color.BLACK}
-          colorToAlphaThreshold={0.2}
+        <GeoJsonDataSource
+          data="/data/ne_110m_admin_0_countries.geojson"
+          stroke={Color.CYAN.withAlpha(0.7)}
+          strokeWidth={1}
+          fill={Color.TRANSPARENT}
         />
-        {showClouds && <ResiumImageryLayer imageryProvider={cloudsProvider} alpha={0.55} />}
+        {graticuleLines.map((positions, i) => (
+          <Entity key={i}>
+            <PolylineGraphics positions={positions} width={1} material={GRATICULE_MATERIAL} />
+          </Entity>
+        ))}
         <AuroraLayer />
 
         {activeLayers.includes("earthquakes") && <EarthquakeLayer />}

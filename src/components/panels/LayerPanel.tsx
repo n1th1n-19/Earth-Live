@@ -12,10 +12,9 @@ const LAYERS: { id: LayerId; label: string; category: string; cadence: string }[
   { id: "wildfires", label: "Wildfires", category: "Geological", cadence: "~3 hr" },
   { id: "flights", label: "Flights", category: "Transportation", cadence: "~45 s" },
   { id: "iss", label: "ISS", category: "Space", cadence: "~2 s" },
-  { id: "clouds", label: "Clouds", category: "Visual", cadence: "~1 day" },
 ];
 
-const CATEGORIES = ["Weather", "Geological", "Transportation", "Space", "Visual"];
+const CATEGORIES = ["Weather", "Geological", "Transportation", "Space"];
 
 export function LayerPanel() {
   const open = useUiStore((s) => s.layerPanelOpen);

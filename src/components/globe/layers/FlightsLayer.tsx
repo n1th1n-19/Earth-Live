@@ -1,17 +1,17 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { Cartesian3, Color } from "cesium";
-import { CustomDataSource, Entity, PointGraphics, PolylineGraphics } from "resium";
+import { Cartesian3, Color, Math as CesiumMath } from "cesium";
+import { BillboardGraphics, CustomDataSource, Entity, PolylineGraphics } from "resium";
 import { useFlights } from "@/lib/use-flights";
 import { useEntityClustering } from "@/lib/use-entity-clustering";
+import { getIconDataUri } from "@/lib/icon-billboard";
 import { useUiStore } from "@/lib/store";
 import { formatSpeedKmh } from "@/lib/units";
 import type { Flight } from "@/lib/adapters/opensky";
 
-// Capped to MAX_FLIGHTS (src/lib/adapters/opensky.ts) and rendered as plain
-// points — heading-aware icons are still a TODO.md Phase 5 item, but
-// clustering (via useEntityClustering) now keeps dense airspace legible.
+// Capped to MAX_FLIGHTS (src/lib/adapters/opensky.ts). Clustering (via
+// useEntityClustering) keeps dense airspace legible.
 const TRAIL_LENGTH = 6;
 
 type LatLon = { latitude: number; longitude: number };
@@ -81,11 +81,17 @@ export function FlightsLayer() {
               name={flight.callsign ?? flight.icao24}
               onClick={() => setSelectedEvent(toSelectedEvent(flight))}
             >
-              <PointGraphics
-                pixelSize={6}
+              <BillboardGraphics
+                image={getIconDataUri("plane")}
                 color={Color.CYAN.withAlpha(0.9)}
-                outlineColor={Color.BLACK}
-                outlineWidth={1}
+                width={18}
+                height={18}
+                // alignedAxis measures rotation from geographic north rather
+                // than screen-up, so the icon keeps pointing the plane's
+                // real heading as the camera tilts/rotates — verified
+                // against a real flight in the browser check, not guessed.
+                alignedAxis={Cartesian3.UNIT_Z}
+                rotation={CesiumMath.toRadians(-(flight.headingDeg ?? 0))}
               />
             </Entity>
           </Fragment>

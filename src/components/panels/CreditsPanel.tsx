@@ -18,10 +18,7 @@ const SOURCES: { name: string; note: string }[] = [
   { name: "sunrise-sunset.org", note: "Sunrise/sunset times" },
   { name: "OpenAQ", note: "Air quality station data (CC BY 4.0)" },
   { name: "GeoNames", note: "Timezone lookup (CC BY 4.0)" },
-  { name: "OpenStreetMap contributors", note: "Base map imagery (ODbL)" },
-  { name: "NASA GIBS / VIIRS", note: "Cloud overlay (true color, ~1 day lag)" },
-  { name: "NASA Black Marble", note: "Night-lights overlay (VIIRS City Lights 2012)" },
-  { name: "Cesium ion", note: "World Terrain + satellite base imagery" },
+  { name: "Natural Earth", note: "Country borders (public domain, 1:110m)" },
 ];
 
 export function CreditsPanel() {
