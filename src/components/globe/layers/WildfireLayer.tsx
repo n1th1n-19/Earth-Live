@@ -4,7 +4,7 @@ import { Cartesian3, Color } from "cesium";
 import { BillboardGraphics, CustomDataSource, Entity } from "resium";
 import { useWildfires } from "@/lib/use-wildfires";
 import { useEntityClustering } from "@/lib/use-entity-clustering";
-import { getIconDataUri } from "@/lib/icon-billboard";
+import { getGlowDataUri } from "@/lib/glow-billboard";
 import { useUiStore } from "@/lib/store";
 import type { FireDetection } from "@/lib/adapters/firms";
 
@@ -31,10 +31,10 @@ export function WildfireLayer() {
           onClick={() => setSelectedEvent(toSelectedEvent(fire))}
         >
           <BillboardGraphics
-            image={getIconDataUri("flame")}
+            image={getGlowDataUri()}
             color={Color.ORANGERED.withAlpha(0.85)}
-            width={16}
-            height={16}
+            width={26}
+            height={26}
           />
         </Entity>
       ))}

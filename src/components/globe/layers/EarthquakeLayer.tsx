@@ -6,7 +6,7 @@ import { BillboardGraphics, CustomDataSource, Entity, ImageryLayer as ResiumImag
 import { useEarthquakes } from "@/lib/use-earthquakes";
 import { useEarthquakeHistory } from "@/lib/use-earthquake-history";
 import { useEntityClustering } from "@/lib/use-entity-clustering";
-import { getIconDataUri } from "@/lib/icon-billboard";
+import { getGlowDataUri } from "@/lib/glow-billboard";
 import { useUiStore } from "@/lib/store";
 import type { Earthquake } from "@/lib/adapters/usgs-earthquakes";
 
@@ -91,10 +91,10 @@ export function EarthquakeLayer() {
           onClick={() => setSelectedEvent(toSelectedEvent(quake))}
         >
           <BillboardGraphics
-            image={getIconDataUri("activity")}
+            image={getGlowDataUri()}
             color={colorFor(quake.magnitude)}
-            width={sizeFor(quake.magnitude)}
-            height={sizeFor(quake.magnitude)}
+            width={sizeFor(quake.magnitude) * 1.6}
+            height={sizeFor(quake.magnitude) * 1.6}
           />
         </Entity>
       ))}
