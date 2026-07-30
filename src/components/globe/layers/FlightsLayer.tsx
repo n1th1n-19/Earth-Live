@@ -1,14 +1,17 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { Cartesian3, Color, Math as CesiumMath } from "cesium";
-import { BillboardGraphics, CustomDataSource, Entity, PolylineGraphics } from "resium";
+import { Cartesian3, Color, HeadingPitchRoll, Math as CesiumMath, Transforms } from "cesium";
+import { CustomDataSource, Entity, ModelGraphics, PolylineGraphics } from "resium";
 import { useFlights } from "@/lib/use-flights";
 import { useEntityClustering } from "@/lib/use-entity-clustering";
-import { getIconDataUri } from "@/lib/icon-billboard";
 import { useUiStore } from "@/lib/store";
 import { formatSpeedKmh } from "@/lib/units";
 import type { Flight } from "@/lib/adapters/opensky";
+
+// Real low-poly glTF, not a flat icon — public/models/airplane.glb (Poly
+// Pizza, "Poly by Google", CC-BY 3.0 — credited in CreditsPanel.tsx).
+const AIRPLANE_MODEL_URI = "/models/airplane.glb";
 
 // Capped to MAX_FLIGHTS (src/lib/adapters/opensky.ts). Clustering (via
 // useEntityClustering) keeps dense airspace legible.
@@ -72,28 +75,32 @@ export function FlightsLayer() {
                 />
               </Entity>
             ))}
-            <Entity
-              position={Cartesian3.fromDegrees(
+            {(() => {
+              const position = Cartesian3.fromDegrees(
                 flight.longitude,
                 flight.latitude,
                 flight.altitudeM ?? 0,
-              )}
-              name={flight.callsign ?? flight.icao24}
-              onClick={() => setSelectedEvent(toSelectedEvent(flight))}
-            >
-              <BillboardGraphics
-                image={getIconDataUri("plane")}
-                color={Color.CYAN.withAlpha(0.9)}
-                width={18}
-                height={18}
-                // alignedAxis measures rotation from geographic north rather
-                // than screen-up, so the icon keeps pointing the plane's
-                // real heading as the camera tilts/rotates — verified
-                // against a real flight in the browser check, not guessed.
-                alignedAxis={Cartesian3.UNIT_Z}
-                rotation={CesiumMath.toRadians(-(flight.headingDeg ?? 0))}
-              />
-            </Entity>
+              );
+              // Real 3D model orientation, not a flat billboard rotation —
+              // Transforms.headingPitchRollQuaternion computes a real-world
+              // heading/pitch/roll rotation at this exact position.
+              // HeadingPitchRoll.heading is radians clockwise from north,
+              // the same convention OpenSky's headingDeg already uses.
+              const orientation = Transforms.headingPitchRollQuaternion(
+                position,
+                new HeadingPitchRoll(CesiumMath.toRadians(flight.headingDeg ?? 0), 0, 0),
+              );
+              return (
+                <Entity
+                  position={position}
+                  orientation={orientation}
+                  name={flight.callsign ?? flight.icao24}
+                  onClick={() => setSelectedEvent(toSelectedEvent(flight))}
+                >
+                  <ModelGraphics uri={AIRPLANE_MODEL_URI} minimumPixelSize={24} scale={1} />
+                </Entity>
+              );
+            })()}
           </Fragment>
         );
       })}
