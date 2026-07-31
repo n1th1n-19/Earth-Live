@@ -1,0 +1,40 @@
+name: Upstream canary
+
+# Calls the real third-party APIs and re-parses them through each adapter's
+# zod schema, so provider schema drift surfaces here instead of as an empty
+# panel in production. The regular CI workflow stays entirely offline and
+# fixture-based; this is the only job that touches the network.
+#
+# Scheduled rather than per-push because it fails for reasons unrelated to
+# the commit — an upstream being down, rate-limiting, or a genuine breaking
+# change on their side.
+on:
+  schedule:
+    # 06:00 UTC daily. GitHub delays scheduled runs under load, which is fine
+    # for drift detection.
+    - cron: "0 6 * * *"
+  # Allows running it by hand after a suspected upstream change.
+  workflow_dispatch:
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Only keyless upstreams are covered (USGS, Open-Meteo, CelesTrak,
+      # sunrise-sunset, NOAA SWPC, adsbdb, Wikipedia), so no secrets are
+      # needed. FIRMS/OpenAQ/GeoNames/NASA require API keys and are
+      # deliberately excluded rather than skipped in a way that reads as a
+      # pass — see the note in the canary test file.
+      - name: Live upstream schema check
+        env:
+          CANARY: "1"
+        run: npx vitest run src/lib/__tests__/canary.live.test.ts
