@@ -14,13 +14,16 @@ export function usePlaceInfo(
 
   return useQuery<PlaceInfo>({
     queryKey: ["place-info", name, latitude, longitude],
-    queryFn: async () => {
+    // `signal` comes from React Query and aborts in-flight requests when the
+    // selection changes — clicking through several places quickly otherwise
+    // leaves earlier lookups running to completion for results nobody sees.
+    queryFn: async ({ signal }) => {
       const params = new URLSearchParams({
         name: name!,
         lat: String(latitude),
         lon: String(longitude),
       });
-      const res = await fetch(`/api/place-info?${params}`);
+      const res = await fetch(`/api/place-info?${params}`, { signal });
       if (!res.ok) throw new Error(`place-info request failed with status ${res.status}`);
       return res.json();
     },

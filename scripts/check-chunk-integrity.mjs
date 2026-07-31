@@ -54,11 +54,17 @@ for (const chunk of chunks) {
   }
 }
 
+// Skipped entirely when a chunk is already corrupt — that failure is
+// reported below regardless, so there's no point reading every chunk again.
+// Stops early once both markers turn up.
 const seen = new Set();
-for (const chunk of chunks) {
-  const content = readFileSync(chunk, "utf8");
-  for (const marker of REQUIRED_MARKERS) {
-    if (content.includes(marker)) seen.add(marker);
+if (corrupted.length === 0) {
+  for (const chunk of chunks) {
+    if (seen.size === REQUIRED_MARKERS.length) break;
+    const content = readFileSync(chunk, "utf8");
+    for (const marker of REQUIRED_MARKERS) {
+      if (!seen.has(marker) && content.includes(marker)) seen.add(marker);
+    }
   }
 }
 const missing = REQUIRED_MARKERS.filter((m) => !seen.has(m));

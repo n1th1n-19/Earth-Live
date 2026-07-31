@@ -32,13 +32,6 @@ if (dsn) {
     // setup docs still reference) was removed in v9; in v10 the equivalent
     // is dropping the BrowserSession integration.
     integrations: (defaults) => defaults.filter((i) => i.name !== "BrowserSession"),
-
-    dataCollection: {
-      // To disable sending user data and HTTP bodies, uncomment the lines below. For more info visit:
-      // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#dataCollection
-      // userInfo: false,
-      // httpBodies: [],
-    },
   });
 }
 

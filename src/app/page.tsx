@@ -171,7 +171,10 @@ export default function Home() {
       </div>
 
       {mobileMenuOpen && (
-        <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-20 rounded-t-2xl border-t border-white/10 bg-black/80 p-4 backdrop-blur-2xl sm:hidden">
+        // z-40 keeps the menu above the event-detail popup (z-30). At z-20 the
+        // popup covered it, so opening the menu with a marker selected showed
+        // the popup on top of the menu the user had just asked for.
+        <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 rounded-t-2xl border-t border-white/10 bg-black/80 p-4 backdrop-blur-2xl sm:hidden">
           <div className="mb-3 flex items-center justify-between">
             <span className="text-xs uppercase tracking-wide text-neutral-400">Menu</span>
             <button

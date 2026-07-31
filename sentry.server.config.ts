@@ -19,12 +19,5 @@ if (dsn) {
     // Which deploy an error came from. Vercel injects both automatically.
     environment: process.env.VERCEL_ENV ?? "development",
     release: process.env.VERCEL_GIT_COMMIT_SHA,
-
-    dataCollection: {
-      // To disable sending user data and HTTP bodies, uncomment the lines below. For more info visit:
-      // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#dataCollection
-      // userInfo: false,
-      // httpBodies: [],
-    },
   });
 }

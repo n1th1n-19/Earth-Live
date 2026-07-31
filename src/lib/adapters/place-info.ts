@@ -7,14 +7,26 @@ import { logApiCall } from "@/lib/api-log";
 //
 //  - Wikipedia REST summary API (CC BY-SA 4.0). Gives the encyclopaedic
 //    one-paragraph "what this place is known for". No key, no quota tier.
-//  - Open-Meteo's climate API, which serves real 1991-2020 daily normals
-//    (the standard WMO climate-normal period), not a live forecast. Same
-//    provider already used for current weather (src/lib/adapters/open-meteo.ts).
+//  - Open-Meteo's ERA5 archive API for climate averages. ERA5 is a
+//    *reanalysis* — real observations assimilated onto a grid — so these are
+//    measured historical conditions, not a forecast and not a model
+//    projection. Same provider already used for current weather
+//    (src/lib/adapters/open-meteo.ts).
+//
+//    This deliberately does NOT use Open-Meteo's /v1/climate endpoint: that
+//    serves downscaled CMIP6 *model* output (MRI_AGCM3_2_S and friends),
+//    which is a simulation, and labelling it "WMO climate normals" in the UI
+//    would have overclaimed what the number actually is.
 //
 // Both are static-ish per place, so cached hard.
 const CACHE_TTL_SECONDS = 7 * 24 * 60 * 60;
-const CLIMATE_START = "1991-01-01";
-const CLIMATE_END = "2020-12-31";
+
+// A 10-year window: long enough to average out individual weather years,
+// while keeping the response ~80KB instead of the ~250KB a 30-year daily
+// pull cost (which showed up as multi-second first loads).
+const CLIMATE_START = "2015-01-01";
+const CLIMATE_END = "2024-12-31";
+export const CLIMATE_PERIOD_LABEL = "2015-2024";
 const UPSTREAM_TIMEOUT_MS = 6000;
 
 const summarySchema = z.object({
@@ -37,9 +49,9 @@ export interface PlaceInfo {
   /** Wikipedia's lead paragraph — what the place is known for. */
   summary: string | null;
   sourceUrl: string | null;
-  /** Mean of real 1991-2020 daily normals, °C. */
+  /** Mean daily temperature across CLIMATE_PERIOD_LABEL (ERA5), °C. */
   averageTempC: number | null;
-  /** Real 1991-2020 mean total annual precipitation, mm. */
+  /** Mean total precipitation per year across CLIMATE_PERIOD_LABEL, mm. */
   annualPrecipitationMm: number | null;
 }
 
@@ -70,36 +82,37 @@ function mean(values: (number | null)[]): number | null {
   return real.reduce((sum, v) => sum + v, 0) / real.length;
 }
 
-async function fetchClimateNormals(
+async function fetchClimateAverages(
   latitude: number,
   longitude: number,
 ): Promise<Pick<PlaceInfo, "averageTempC" | "annualPrecipitationMm">> {
-  const url = new URL("https://climate-api.open-meteo.com/v1/climate");
+  const url = new URL("https://archive-api.open-meteo.com/v1/archive");
   url.searchParams.set("latitude", String(latitude));
   url.searchParams.set("longitude", String(longitude));
   url.searchParams.set("start_date", CLIMATE_START);
   url.searchParams.set("end_date", CLIMATE_END);
-  url.searchParams.set("models", "MRI_AGCM3_2_S");
   url.searchParams.set("daily", "temperature_2m_mean,precipitation_sum");
+  url.searchParams.set("timezone", "UTC");
 
   const response = await fetch(url, {
     next: { revalidate: 0 },
     signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
   });
-  if (!response.ok) throw new Error(`Open-Meteo climate request failed with status ${response.status}`);
+  if (!response.ok) throw new Error(`Open-Meteo archive request failed with status ${response.status}`);
 
   const parsed = climateSchema.parse(await response.json());
-  const temps = parsed.daily.temperature_2m_mean;
-  const precip = parsed.daily.precipitation_sum ?? [];
+  const avgTemp = mean(parsed.daily.temperature_2m_mean);
 
-  const avgTemp = mean(temps);
-  // Daily totals across the whole 30-year window, converted to a per-year
-  // average rather than reported as one enormous sum.
-  const precipReal = precip.filter((v): v is number => v != null);
-  const years = (new Date(CLIMATE_END).getTime() - new Date(CLIMATE_START).getTime()) / (365.25 * 24 * 3600 * 1000);
+  // Scale by the days actually returned with a reading, not by the nominal
+  // window length — a grid cell with gaps would otherwise under-report.
+  const precipDays = (parsed.daily.precipitation_sum ?? []).filter((v): v is number => v != null);
   const annualPrecip =
-    precipReal.length === 0 ? null : precipReal.reduce((sum, v) => sum + v, 0) / years;
+    precipDays.length === 0
+      ? null
+      : (precipDays.reduce((sum, v) => sum + v, 0) / precipDays.length) * 365.25;
 
+  // Only the two scalars escape this function; the daily arrays go out of
+  // scope here rather than being held in the cached value.
   return { averageTempC: avgTemp, annualPrecipitationMm: annualPrecip };
 }
 
@@ -117,7 +130,7 @@ export async function fetchPlaceInfo(
       // other, so failures degrade to nulls per-source rather than throwing.
       const [summary, climate] = await Promise.allSettled([
         fetchWikipediaSummary(name),
-        fetchClimateNormals(latitude, longitude),
+        fetchClimateAverages(latitude, longitude),
       ]);
 
       return {
@@ -132,7 +145,7 @@ export async function fetchPlaceInfo(
 
     logApiCall({
       source: "place-info",
-      endpoint: "/wikipedia+open-meteo-climate",
+      endpoint: "/wikipedia+open-meteo-archive",
       statusCode: 200,
       latencyMs: Date.now() - started,
       cacheHit,
@@ -142,7 +155,7 @@ export async function fetchPlaceInfo(
   } catch (err) {
     logApiCall({
       source: "place-info",
-      endpoint: "/wikipedia+open-meteo-climate",
+      endpoint: "/wikipedia+open-meteo-archive",
       statusCode: null,
       latencyMs: Date.now() - started,
       cacheHit: false,

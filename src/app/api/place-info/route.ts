@@ -6,10 +6,16 @@ import { fetchPlaceInfo } from "@/lib/adapters/place-info";
 // a place marker is actually selected.
 export const dynamic = "force-dynamic";
 
+// lat/lon are validated as non-empty strings *before* coercion: a missing
+// param arrives as null and an empty one as "", and z.coerce.number() turns
+// both into 0 — which sits inside the valid range, so the request would have
+// silently resolved to 0°N 0°E in the Gulf of Guinea instead of failing.
+const coordinate = z.string().min(1).pipe(z.coerce.number());
+
 const querySchema = z.object({
   name: z.string().min(1).max(120),
-  lat: z.coerce.number().min(-90).max(90),
-  lon: z.coerce.number().min(-180).max(180),
+  lat: coordinate.pipe(z.number().min(-90).max(90)),
+  lon: coordinate.pipe(z.number().min(-180).max(180)),
 });
 
 export async function GET(request: Request) {

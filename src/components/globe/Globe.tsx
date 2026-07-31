@@ -126,6 +126,17 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   const [measuring, setMeasuring] = useState(false);
   const [measurePoints, setMeasurePoints] = useState<LatLon[]>([]);
   const [hoverTarget, setHoverTarget] = useState<HoverTarget | null>(null);
+  // Latest un-picked cursor position, and the frame scheduled to pick it —
+  // see handleMouseMove.
+  const pendingHoverRef = useRef<Cartesian2 | null>(null);
+  const hoverFrameRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (hoverFrameRef.current !== null) cancelAnimationFrame(hoverFrameRef.current);
+    },
+    [],
+  );
 
   // Real-time day/night terminator (FR-1) — Cesium computes this from actual
   // sun position once lighting is enabled; no custom math needed. Kept even
@@ -185,14 +196,31 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   // were looking at; the location is now shown by UserLocationMarker instead
   // (an explicit "Recenter on my location" control still exists for when a
   // close-up actually is wanted).
+  //
+  // Retries on animation frames until the Viewer exists, for the same reason
+  // the lighting effect above does: Resium builds it asynchronously, so when
+  // geolocation resolves before that finishes this would otherwise no-op
+  // once and never re-centre.
   useEffect(() => {
-    const viewer = getLiveViewer();
-    if (!viewer || latitude == null || longitude == null || hasFlownRef.current) return;
+    if (latitude == null || longitude == null || hasFlownRef.current) return;
 
-    hasFlownRef.current = true;
-    viewer.camera.setView({
-      destination: Cartesian3.fromDegrees(longitude, latitude, GLOBAL_VIEW_HEIGHT_M),
-    });
+    let cancelled = false;
+    function apply() {
+      if (cancelled || latitude == null || longitude == null) return;
+      const viewer = getLiveViewer();
+      if (!viewer) {
+        requestAnimationFrame(apply);
+        return;
+      }
+      hasFlownRef.current = true;
+      viewer.camera.setView({
+        destination: Cartesian3.fromDegrees(longitude, latitude, GLOBAL_VIEW_HEIGHT_M),
+      });
+    }
+    apply();
+    return () => {
+      cancelled = true;
+    };
   }, [latitude, longitude]);
 
   // Real-time Earth rotation. Cesium's globe is fixed to the Earth-centred
@@ -257,17 +285,17 @@ export function Globe({ latitude, longitude }: GlobeProps) {
     };
   }
 
-  function handleMouseMove(movement: { endPosition?: Cartesian2 }) {
-    if (!movement.endPosition) return;
-    const coords = pickEllipsoidCoordinates(movement.endPosition);
-    setCursorCoordinates(coords);
-
-    // Hover readout: whatever entity is under the cursor identifies itself
-    // via its own `name`/`description`, so this works for every layer
-    // (flights, ISS, quakes, fires, capitals) without per-layer wiring.
+  // Hover readout: whatever entity is under the cursor identifies itself via
+  // its own `name`/`description`, so this works for every layer (flights,
+  // ISS, quakes, fires, capitals) without per-layer wiring.
+  //
+  // scene.pick renders an offscreen pick pass, which is far too expensive to
+  // run on every mousemove — the browser fires those faster than frames. Only
+  // the most recent cursor position is kept, and it's picked once per frame.
+  function runHoverPick(position: Cartesian2) {
     const viewer = getLiveViewer();
     if (!viewer) return;
-    const picked = viewer.scene.pick(movement.endPosition);
+    const picked = viewer.scene.pick(position);
     const entity = picked?.id;
     const label = typeof entity?.name === "string" ? entity.name : null;
     if (!label) {
@@ -280,8 +308,22 @@ export function Globe({ latitude, longitude }: GlobeProps) {
     setHoverTarget({
       label,
       detail: typeof description === "string" ? description : undefined,
-      x: movement.endPosition.x,
-      y: movement.endPosition.y,
+      x: position.x,
+      y: position.y,
+    });
+  }
+
+  function handleMouseMove(movement: { endPosition?: Cartesian2 }) {
+    if (!movement.endPosition) return;
+    const coords = pickEllipsoidCoordinates(movement.endPosition);
+    setCursorCoordinates(coords);
+
+    pendingHoverRef.current = movement.endPosition.clone();
+    if (hoverFrameRef.current !== null) return;
+    hoverFrameRef.current = requestAnimationFrame(() => {
+      hoverFrameRef.current = null;
+      const position = pendingHoverRef.current;
+      if (position) runHoverPick(position);
     });
   }
 
