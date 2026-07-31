@@ -13,6 +13,7 @@ const SOURCES: { name: string; note: string }[] = [
   { name: "NASA FIRMS", note: "Active fire detections" },
   { name: "CelesTrak", note: "Satellite/ISS orbital elements" },
   { name: "OpenSky Network", note: "Live flight positions" },
+  { name: "adsbdb.com", note: "Flight routes (selected flight only)" },
   { name: "NOAA Space Weather Prediction Center", note: "Kp index" },
   { name: "NASA DONKI", note: "Space weather notifications" },
   { name: "sunrise-sunset.org", note: "Sunrise/sunset times" },

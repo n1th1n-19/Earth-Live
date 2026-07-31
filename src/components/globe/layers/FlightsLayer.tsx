@@ -1,12 +1,13 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { Cartesian3, Color, HeadingPitchRoll, Math as CesiumMath, Transforms } from "cesium";
+import { ArcType, Cartesian3, Color, HeadingPitchRoll, Math as CesiumMath, PolylineGlowMaterialProperty, Transforms } from "cesium";
 import { CustomDataSource, Entity, ModelGraphics, PolylineGraphics } from "resium";
 import { useFlights } from "@/lib/use-flights";
 import { useEntityClustering } from "@/lib/use-entity-clustering";
 import { useUiStore } from "@/lib/store";
 import { formatSpeedKmh } from "@/lib/units";
+import { useFlightRoute } from "@/lib/use-flight-route";
 import type { Flight } from "@/lib/adapters/opensky";
 
 // Real low-poly glTF, not a flat icon — public/models/airplane.glb (Poly
@@ -56,7 +57,9 @@ export function FlightsLayer() {
   if (!data) return null;
 
   return (
-    <CustomDataSource clustering={clustering}>
+    <>
+      <SelectedFlightRoute />
+      <CustomDataSource clustering={clustering}>
       {data.map((flight) => {
         const trail = trails.get(flight.icao24);
         return (
@@ -104,7 +107,37 @@ export function FlightsLayer() {
           </Fragment>
         );
       })}
-    </CustomDataSource>
+      </CustomDataSource>
+    </>
+  );
+}
+
+// Real great-circle route line (adsbdb.com), drawn only for the currently
+// selected flight — fetching this for all ~400 tracked aircraft up front
+// would be excessive load for data most users never look at. Callsigns that
+// don't resolve (general aviation, adsbdb only knows scheduled airline
+// routes) draw nothing — no synthesized fallback line.
+function SelectedFlightRoute() {
+  const selectedEvent = useUiStore((s) => s.selectedEvent);
+  const callsign = selectedEvent?.kind === "flight" ? selectedEvent.title : null;
+  const { data: route } = useFlightRoute(callsign);
+
+  if (!route) return null;
+
+  return (
+    <Entity name={`${route.origin.name} → ${route.destination.name}`}>
+      <PolylineGraphics
+        positions={Cartesian3.fromDegreesArray([
+          route.origin.longitude,
+          route.origin.latitude,
+          route.destination.longitude,
+          route.destination.latitude,
+        ])}
+        width={2}
+        arcType={ArcType.GEODESIC}
+        material={new PolylineGlowMaterialProperty({ color: Color.CYAN.withAlpha(0.8), glowPower: 0.2 })}
+      />
+    </Entity>
   );
 }
 

@@ -38,7 +38,8 @@ Auth is explicitly out of scope per product decision — every Phase 1 auth item
   - [x] **GeoNames (timezone)** → inline in `WeatherPanel`
   - [x] **NASA DONKI (space weather events)** → expandable list in `SpaceWeatherPanel`
 - Not started (unchanged from before, still real gaps):
-  - [ ] Open-Meteo elevation, NWS alerts, NOAA radar, Smithsonian GVP volcanoes, GDACS, NASA EPIC/APOD/NeoWs, OurAirports, NOAA NDBC/CO-OPS/NHC, REST Countries/Wikidata, Blitzortung lightning, AISHub ships
+  - [x] **adsbdb.com (flight routes)** → `FlightsLayer` — lazy, per-selection callsign→route lookup; draws a real great-circle line when resolvable, no fallback otherwise
+  - [ ] Open-Meteo elevation, NWS alerts, NOAA radar, Smithsonian GVP volcanoes, GDACS, NASA EPIC/APOD/NeoWs, OurAirports, NOAA NDBC/CO-OPS/NHC, Wikidata, Blitzortung lightning, AISHub ships
 - [ ] SSE endpoints for ISS + flights fan-out *(still client polling — fine at current scale)*
 - [x] Redis-backed rate limiter — `/api/geocode`
 - [ ] Scheduled cron (cache pre-warming, notification sweep, bulk re-sync) — **still blocked**, needs an interactive `vercel link` this environment can't run
@@ -91,7 +92,7 @@ Auth is explicitly out of scope per product decision — every Phase 1 auth item
 
 ## Phase 7 — Testing & hardening
 
-- [x] **Vitest coverage for all 11 adapters now** (was 1 of 11) — 14 test files, 28 tests, all passing. Fixtures use the real response shapes verified live this session (including the 3 schema bugs found and fixed earlier: CelesTrak TLE format, SWPC object shape, sunrise-sunset integer day_length).
+- [x] **Vitest coverage for all 12 adapters now** (was 1 of 11) — 15 test files, 30 tests, all passing. Fixtures use the real response shapes verified live this session (including the 3 schema bugs found and fixed earlier: CelesTrak TLE format, SWPC object shape, sunrise-sunset integer day_length).
 - [ ] Playwright E2E — not started
 - [ ] Scheduled CI canary workflow — not started (the new `ci.yml` covers lint/typecheck/test/build, not a live-shape diff job)
 - [x] **CSP + security headers** — `next.config.ts` now sets Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy. CORS: no headers added anywhere, which is the correct locked-down (same-origin-only) state per docs — nothing to add.
