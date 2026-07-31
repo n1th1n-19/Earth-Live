@@ -14,6 +14,7 @@ const LAYER_LABELS: Record<LayerId, string> = {
   earthquakes: "Earthquakes",
   wildfires: "Wildfires",
   disasters: "Disaster alerts",
+  alerts: "US severe weather",
   flights: "Flights",
   iss: "ISS",
   places: "Capitals",

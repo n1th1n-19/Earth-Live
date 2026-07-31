@@ -18,6 +18,7 @@ const SOURCES: { name: string; note: string; url?: string; license?: string }[] 
   { name: "adsbdb.com", note: "Flight routes (selected flight only)" },
   { name: "NOAA Space Weather Prediction Center", note: "Kp index" },
   { name: "GDACS (European Commission & UN)", note: "Global disaster alerts" },
+  { name: "NOAA / National Weather Service", note: "US severe weather alerts (public domain)" },
   { name: "NASA DONKI", note: "Space weather notifications" },
   { name: "sunrise-sunset.org", note: "Sunrise/sunset times" },
   { name: "OpenAQ", note: "Air quality station data (CC BY 4.0)" },

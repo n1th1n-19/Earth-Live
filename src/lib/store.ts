@@ -7,13 +7,13 @@ import { persist } from "zustand/middleware";
 // (liveness badge is only honest if the layer actually does something).
 // Clouds/night-lights/borders/etc. from the full docs/02 layer table are not
 // implemented yet — deliberately not exposed as togglable here.
-export type LayerId = "weather" | "earthquakes" | "flights" | "iss" | "wildfires" | "places" | "disasters";
+export type LayerId = "weather" | "earthquakes" | "flights" | "iss" | "wildfires" | "places" | "disasters" | "alerts";
 
 /** The individually closeable local-conditions cards (top-left of the globe). */
 export type PanelId = "weather" | "airQuality" | "sunMoon";
 
 export interface SelectedEvent {
-  kind: "earthquake" | "flight" | "iss" | "satellite" | "wildfire" | "place" | "disaster";
+  kind: "earthquake" | "flight" | "iss" | "satellite" | "wildfire" | "place" | "disaster" | "alert";
   title: string;
   attributes: { label: string; value: string }[];
   sourceUrl?: string;

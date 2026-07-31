@@ -11,6 +11,7 @@ const LAYERS: { id: LayerId; label: string; category: string; cadence: string }[
   { id: "earthquakes", label: "Earthquakes", category: "Geological", cadence: "~60 s" },
   { id: "wildfires", label: "Wildfires", category: "Geological", cadence: "~3 hr" },
   { id: "disasters", label: "Disaster alerts", category: "Geological", cadence: "~30 min" },
+  { id: "alerts", label: "US severe (mapped)", category: "Weather", cadence: "~5 min" },
   { id: "flights", label: "Flights", category: "Transportation", cadence: "~45 s" },
   { id: "iss", label: "ISS", category: "Space", cadence: "~2 s" },
   { id: "places", label: "Capitals", category: "Places", cadence: "static" },
