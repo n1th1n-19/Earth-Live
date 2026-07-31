@@ -57,6 +57,27 @@ import type { NextConfig } from "next";
 //
 // Place summaries and climate normals are fetched server-side through this
 // app's own /api/place-info route, so they need no client-side entry either.
+// Who may embed this app in an <iframe>. Deliberately an allowlist, not `*`:
+// anyone not named here gets the browser's "won't display" refusal.
+//
+// The wildcard covers www. and any other MeWe subdomain that might serve the
+// embedding page; `https://mewe.com` has to be listed separately because a
+// wildcard does not match the bare apex domain.
+//
+// Override per-environment with FRAME_ANCESTORS as a space- or
+// comma-separated origin list. Origins must be scheme-qualified and carry no
+// path — browsers silently ignore a malformed frame-ancestors source rather
+// than reporting it, which looks identical to the embed just not working.
+const DEFAULT_FRAME_ANCESTORS = ["https://mewe.com", "https://*.mewe.com"];
+
+const configuredFrameAncestors = (process.env.FRAME_ANCESTORS ?? "")
+  .split(/[\s,]+/)
+  .map((origin) => origin.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
+
+const frameAncestors =
+  configuredFrameAncestors.length > 0 ? configuredFrameAncestors : DEFAULT_FRAME_ANCESTORS;
+
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://static.cloudflareinsights.com",
@@ -67,7 +88,9 @@ const CSP = [
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
-  "frame-ancestors 'none'",
+  frameAncestors.length > 0
+    ? `frame-ancestors ${frameAncestors.join(" ")}`
+    : "frame-ancestors 'none'",
 ].join("; ");
 
 const nextConfig: NextConfig = {
@@ -186,7 +209,12 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [
           { key: "Content-Security-Policy", value: CSP },
-          { key: "X-Frame-Options", value: "DENY" },
+          // No X-Frame-Options. It predates CSP and only understands
+          // DENY/SAMEORIGIN — it cannot express a cross-origin allowlist, and
+          // browsers that support both give it precedence, so leaving
+          // `DENY` here would keep blocking the allowed embedders above.
+          // `frame-ancestors` in the CSP is the modern equivalent and is
+          // honoured by every browser this app targets.
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "geolocation=(self), camera=(), microphone=()" },
