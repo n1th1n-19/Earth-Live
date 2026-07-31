@@ -38,13 +38,16 @@ import {
   Math as CesiumMath,
 } from "cesium";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Entity, GeoJsonDataSource, PointGraphics, PolylineGraphics, Viewer } from "resium";
+import { Entity, PointGraphics, PolylineGraphics, Viewer } from "resium";
 import type { Viewer as CesiumViewer } from "cesium";
 import { useUiStore } from "@/lib/store";
 import { totalPathDistanceKm, type LatLon } from "@/lib/geo-math";
 import { formatDistanceKm } from "@/lib/units";
 import { FloatingControls } from "@/components/globe/FloatingControls";
+import { GlobeTooltip, type HoverTarget } from "@/components/globe/GlobeTooltip";
 import { AuroraLayer } from "@/components/globe/layers/AuroraLayer";
+import { BordersLayer } from "@/components/globe/layers/BordersLayer";
+import { UserLocationMarker } from "@/components/globe/layers/UserLocationMarker";
 import { EarthquakeLayer } from "@/components/globe/layers/EarthquakeLayer";
 import { FlightsLayer } from "@/components/globe/layers/FlightsLayer";
 import { IssLayer } from "@/components/globe/layers/IssLayer";
@@ -65,6 +68,15 @@ import { WildfireLayer } from "@/components/globe/layers/WildfireLayer";
 // module-level singleton is fine — same flat sphere the wireframe reference
 // image shows, no relief needed.
 const ellipsoidTerrain = new EllipsoidTerrainProvider();
+
+// Whole-globe framing — the view the app opens on, and where it stays when
+// the user's location resolves.
+const GLOBAL_VIEW_HEIGHT_M = 20_000_000;
+
+// One rotation per sidereal day: the Earth's real rotation period relative
+// to the fixed stars (86,164.0905s), not the 86,400s mean solar day.
+const SIDEREAL_DAY_SECONDS = 86_164.0905;
+const EARTH_ROTATION_RAD_PER_SEC = (2 * Math.PI) / SIDEREAL_DAY_SECONDS;
 
 interface GlobeProps {
   latitude: number | null;
@@ -109,9 +121,11 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   const setCursorCoordinates = useUiStore((s) => s.setCursorCoordinates);
   const flyToTarget = useUiStore((s) => s.flyToTarget);
   const clearFlyTo = useUiStore((s) => s.clearFlyTo);
+  const earthRotation = useUiStore((s) => s.earthRotation);
 
   const [measuring, setMeasuring] = useState(false);
   const [measurePoints, setMeasurePoints] = useState<LatLon[]>([]);
+  const [hoverTarget, setHoverTarget] = useState<HoverTarget | null>(null);
 
   // Real-time day/night terminator (FR-1) — Cesium computes this from actual
   // sun position once lighting is enabled; no custom math needed. Kept even
@@ -165,22 +179,54 @@ export function Globe({ latitude, longitude }: GlobeProps) {
     };
   }, [setCameraPosition]);
 
-  // Cinematic intro (FR-1 polish): snap instantly to a far-out space view
-  // above the target, then fly down — reads as "arriving at Earth" rather
-  // than an instant cut straight to street-ish altitude.
+  // Resolving the user's location only re-centres the globe on them — it no
+  // longer zooms in. Granting location permission used to trigger a 3s fly
+  // down to 1,500km, which yanked the user out of the whole-globe view they
+  // were looking at; the location is now shown by UserLocationMarker instead
+  // (an explicit "Recenter on my location" control still exists for when a
+  // close-up actually is wanted).
   useEffect(() => {
     const viewer = getLiveViewer();
     if (!viewer || latitude == null || longitude == null || hasFlownRef.current) return;
 
     hasFlownRef.current = true;
     viewer.camera.setView({
-      destination: Cartesian3.fromDegrees(longitude, latitude, 20_000_000),
-    });
-    viewer.camera.flyTo({
-      destination: Cartesian3.fromDegrees(longitude, latitude, 1_500_000),
-      duration: 3,
+      destination: Cartesian3.fromDegrees(longitude, latitude, GLOBAL_VIEW_HEIGHT_M),
     });
   }, [latitude, longitude]);
+
+  // Real-time Earth rotation. Cesium's globe is fixed to the Earth-centred
+  // frame, so "the Earth spinning" is expressed by orbiting the camera
+  // westward at the planet's true angular rate. That rate is one turn per
+  // sidereal day (86,164s — the real rotation period against the stars, not
+  // the 86,400s solar day), i.e. ~15°/hour: correct, and therefore slow
+  // enough to read as drift rather than a spin.
+  //
+  // Paused while the user is interacting or a fly-to is running, otherwise
+  // it would fight their input; resumes once the camera settles.
+  useEffect(() => {
+    if (!earthRotation) return;
+    let frame = 0;
+    let last = performance.now();
+
+    function tick(now: number) {
+      const viewer = getLiveViewer();
+      if (viewer && !viewer.scene.screenSpaceCameraController.enableInputs) {
+        last = now;
+        frame = requestAnimationFrame(tick);
+        return;
+      }
+      if (viewer) {
+        const elapsedSeconds = (now - last) / 1000;
+        viewer.camera.rotate(Cartesian3.UNIT_Z, -EARTH_ROTATION_RAD_PER_SEC * elapsedSeconds);
+      }
+      last = now;
+      frame = requestAnimationFrame(tick);
+    }
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [earthRotation]);
 
   // Command palette / search "fly to" requests (FR-12) and the recenter
   // control both funnel through the same store field.
@@ -215,6 +261,28 @@ export function Globe({ latitude, longitude }: GlobeProps) {
     if (!movement.endPosition) return;
     const coords = pickEllipsoidCoordinates(movement.endPosition);
     setCursorCoordinates(coords);
+
+    // Hover readout: whatever entity is under the cursor identifies itself
+    // via its own `name`/`description`, so this works for every layer
+    // (flights, ISS, quakes, fires, capitals) without per-layer wiring.
+    const viewer = getLiveViewer();
+    if (!viewer) return;
+    const picked = viewer.scene.pick(movement.endPosition);
+    const entity = picked?.id;
+    const label = typeof entity?.name === "string" ? entity.name : null;
+    if (!label) {
+      setHoverTarget(null);
+      return;
+    }
+    // Entity.description is a Cesium Property, not a bare string — each
+    // layer sets it to a one-line summary for exactly this readout.
+    const description = entity?.description?.getValue?.(viewer.clock.currentTime);
+    setHoverTarget({
+      label,
+      detail: typeof description === "string" ? description : undefined,
+      x: movement.endPosition.x,
+      y: movement.endPosition.y,
+    });
   }
 
   function handleClick(movement: { position?: Cartesian2 }) {
@@ -338,12 +406,8 @@ export function Globe({ latitude, longitude }: GlobeProps) {
         onMouseMove={handleMouseMove}
         onClick={handleClick}
       >
-        <GeoJsonDataSource
-          data="/data/ne_110m_admin_0_countries.geojson"
-          stroke={Color.CYAN}
-          strokeWidth={2}
-          fill={Color.TRANSPARENT}
-        />
+        <BordersLayer />
+        <UserLocationMarker latitude={latitude} longitude={longitude} />
         <AuroraLayer />
 
         {activeLayers.includes("earthquakes") && <EarthquakeLayer />}
@@ -370,6 +434,8 @@ export function Globe({ latitude, longitude }: GlobeProps) {
           </Entity>
         )}
       </Viewer>
+
+      <GlobeTooltip target={hoverTarget} />
 
       <div className="pointer-events-none absolute bottom-4 right-4 z-10">
         <FloatingControls
