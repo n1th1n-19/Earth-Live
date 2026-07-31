@@ -12,9 +12,10 @@ const LAYERS: { id: LayerId; label: string; category: string; cadence: string }[
   { id: "wildfires", label: "Wildfires", category: "Geological", cadence: "~3 hr" },
   { id: "flights", label: "Flights", category: "Transportation", cadence: "~45 s" },
   { id: "iss", label: "ISS", category: "Space", cadence: "~2 s" },
+  { id: "places", label: "Capitals", category: "Places", cadence: "static" },
 ];
 
-const CATEGORIES = ["Weather", "Geological", "Transportation", "Space"];
+const CATEGORIES = ["Weather", "Geological", "Transportation", "Space", "Places"];
 
 export function LayerPanel() {
   const open = useUiStore((s) => s.layerPanelOpen);
@@ -63,7 +64,9 @@ export function LayerPanel() {
                     <span className={`h-1.5 w-1.5 rounded-full ${isOn ? "bg-emerald-400" : "bg-neutral-600"}`} />
                     {layer.label}
                   </span>
-                  <span className="font-mono text-[10px] text-neutral-500">Live · {layer.cadence}</span>
+                  <span className="font-mono text-[10px] text-neutral-500">
+                    {layer.cadence === "static" ? "Static" : `Live · ${layer.cadence}`}
+                  </span>
                 </button>
               );
             })}

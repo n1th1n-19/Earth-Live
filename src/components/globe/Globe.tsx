@@ -50,6 +50,7 @@ import { AuroraLayer } from "@/components/globe/layers/AuroraLayer";
 import { EarthquakeLayer } from "@/components/globe/layers/EarthquakeLayer";
 import { FlightsLayer } from "@/components/globe/layers/FlightsLayer";
 import { IssLayer } from "@/components/globe/layers/IssLayer";
+import { PlacesLayer } from "@/components/globe/layers/PlacesLayer";
 import { WildfireLayer } from "@/components/globe/layers/WildfireLayer";
 
 // Primary globe engine per docs/03-architecture.md §3.2: CesiumJS, chosen for
@@ -365,6 +366,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
         {activeLayers.includes("flights") && <FlightsLayer />}
         {activeLayers.includes("iss") && <IssLayer />}
         {activeLayers.includes("wildfires") && <WildfireLayer />}
+        {activeLayers.includes("places") && <PlacesLayer />}
 
         {measurePoints.map((point, i) => (
           <Entity key={i} position={Cartesian3.fromDegrees(point.longitude, point.latitude)}>

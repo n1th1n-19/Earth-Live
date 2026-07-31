@@ -7,10 +7,10 @@ import { persist } from "zustand/middleware";
 // (liveness badge is only honest if the layer actually does something).
 // Clouds/night-lights/borders/etc. from the full docs/02 layer table are not
 // implemented yet — deliberately not exposed as togglable here.
-export type LayerId = "weather" | "earthquakes" | "flights" | "iss" | "wildfires";
+export type LayerId = "weather" | "earthquakes" | "flights" | "iss" | "wildfires" | "places";
 
 export interface SelectedEvent {
-  kind: "earthquake" | "flight" | "iss" | "satellite" | "wildfire";
+  kind: "earthquake" | "flight" | "iss" | "satellite" | "wildfire" | "place";
   title: string;
   attributes: { label: string; value: string }[];
   sourceUrl?: string;
@@ -81,7 +81,7 @@ interface UiState {
   setReplayCursor: (iso: string) => void;
 }
 
-const DEFAULT_LAYERS: LayerId[] = ["weather", "earthquakes", "flights", "iss"];
+const DEFAULT_LAYERS: LayerId[] = ["weather", "earthquakes", "flights", "iss", "places"];
 
 export const useUiStore = create<UiState>()(
   persist(

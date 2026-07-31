@@ -18,7 +18,7 @@ const SOURCES: { name: string; note: string }[] = [
   { name: "sunrise-sunset.org", note: "Sunrise/sunset times" },
   { name: "OpenAQ", note: "Air quality station data (CC BY 4.0)" },
   { name: "GeoNames", note: "Timezone lookup (CC BY 4.0)" },
-  { name: "Natural Earth", note: "Country borders (public domain, 1:110m)" },
+  { name: "Natural Earth", note: "Country borders + capital cities (public domain, 1:110m)" },
   { name: "Poly by Google (via Poly Pizza)", note: "Airplane 3D model (CC BY 3.0)" },
   { name: "Kenney (kenney.nl)", note: "Satellite 3D model (CC0)" },
 ];
