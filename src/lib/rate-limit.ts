@@ -14,28 +14,58 @@ const redis =
       })
     : null;
 
-const redisLimiter = redis
-  ? new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(20, "60 s"), prefix: "earth-live:ratelimit" })
+// Two buckets, because one number cannot serve both callers:
+//
+//  - "search" stays tight. It fronts Nominatim, whose usage policy is 1
+//    req/s, and it is only driven by a human typing.
+//  - "api" covers the whole BFF via middleware and must clear normal use: a
+//    single page load fans out to ~10 routes, and the flight/ISS/earthquake
+//    layers then poll on 10-60s intervals. A 20/min cap would throttle a
+//    legitimate visitor within a minute, so it is set well above real usage
+//    while still bounding a caller walking random coordinates to miss the
+//    cache.
+const LIMITS = {
+  search: { max: 20, window: "60 s" },
+  api: { max: 240, window: "60 s" },
+} as const;
+
+export type RateLimitBucket = keyof typeof LIMITS;
+
+const redisLimiters = redis
+  ? {
+      search: new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(LIMITS.search.max, LIMITS.search.window),
+        prefix: "earth-live:ratelimit:search",
+      }),
+      api: new Ratelimit({
+        redis,
+        limiter: Ratelimit.slidingWindow(LIMITS.api.max, LIMITS.api.window),
+        prefix: "earth-live:ratelimit:api",
+      }),
+    }
   : null;
 
 const memoryHits = new Map<string, number[]>();
 const MEMORY_WINDOW_MS = 60_000;
-const MEMORY_MAX = 20;
 
-function memoryLimit(key: string): { success: boolean } {
+function memoryLimit(key: string, max: number): { success: boolean } {
   const now = Date.now();
   const hits = (memoryHits.get(key) ?? []).filter((t) => now - t < MEMORY_WINDOW_MS);
   hits.push(now);
   memoryHits.set(key, hits);
-  return { success: hits.length <= MEMORY_MAX };
+  return { success: hits.length <= max };
 }
 
-export async function checkRateLimit(key: string): Promise<{ success: boolean }> {
-  if (redisLimiter) {
-    const { success } = await redisLimiter.limit(key);
+export async function checkRateLimit(
+  key: string,
+  bucket: RateLimitBucket = "search",
+): Promise<{ success: boolean }> {
+  if (redisLimiters) {
+    const { success } = await redisLimiters[bucket].limit(key);
     return { success };
   }
-  return memoryLimit(key);
+  return memoryLimit(`${bucket}:${key}`, LIMITS[bucket].max);
 }
 
 export function clientKeyFromRequest(request: Request): string {
