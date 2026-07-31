@@ -51,6 +51,7 @@ import { UserLocationMarker } from "@/components/globe/layers/UserLocationMarker
 import { EarthquakeLayer } from "@/components/globe/layers/EarthquakeLayer";
 import { FlightsLayer } from "@/components/globe/layers/FlightsLayer";
 import { IssLayer } from "@/components/globe/layers/IssLayer";
+import { DisastersLayer } from "@/components/globe/layers/DisastersLayer";
 import { PlacesLayer } from "@/components/globe/layers/PlacesLayer";
 import { WildfireLayer } from "@/components/globe/layers/WildfireLayer";
 
@@ -457,6 +458,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
         {activeLayers.includes("iss") && <IssLayer />}
         {activeLayers.includes("wildfires") && <WildfireLayer />}
         {activeLayers.includes("places") && <PlacesLayer />}
+        {activeLayers.includes("disasters") && <DisastersLayer />}
 
         {measurePoints.map((point, i) => (
           <Entity key={i} position={Cartesian3.fromDegrees(point.longitude, point.latitude)}>
