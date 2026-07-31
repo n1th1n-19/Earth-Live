@@ -18,6 +18,11 @@ export function Analytics() {
   const token = process.env.NEXT_PUBLIC_CF_BEACON_TOKEN;
   if (!token) return null;
 
+  // Loaded as a classic script even though Cloudflare's dashboard snippet
+  // says type="module": the bundle they serve is a plain IIFE with no
+  // import/export, and marking it a module makes the browser fetch it in
+  // CORS mode, which no longer matches Next's preload — so it gets requested
+  // twice for no benefit.
   return (
     <Script
       src="https://static.cloudflareinsights.com/beacon.min.js"
