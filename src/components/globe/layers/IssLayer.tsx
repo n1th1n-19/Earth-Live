@@ -44,7 +44,9 @@ export function IssLayer() {
 
   return (
     <Entity position={position} name="International Space Station">
-      <ModelGraphics uri={SATELLITE_MODEL_URI} minimumPixelSize={28} scale={1} />
+      {/* minimumPixelSize keeps the ISS a legible icon at whole-globe zoom;
+          maximumScale stops it filling the screen when flown up close. */}
+      <ModelGraphics uri={SATELLITE_MODEL_URI} minimumPixelSize={44} maximumScale={40_000} scale={1} />
       <LabelGraphics
         text="ISS"
         font="12px monospace"
