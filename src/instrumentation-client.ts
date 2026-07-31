@@ -17,10 +17,21 @@ if (dsn) {
   Sentry.init({
     dsn,
 
-    // GlitchTip's free tier allows 1,000 events/month, so traces are sampled
-    // lightly — errors are the point here, and a 100% trace rate would burn
-    // the whole monthly allowance on routine traffic.
-    tracesSampleRate: 0.05,
+    // GlitchTip's free tier allows 1,000 events/month and its own docs
+    // recommend ~1% in production; errors are the point here, and a high
+    // trace rate would burn the monthly allowance on routine traffic.
+    tracesSampleRate: 0.01,
+
+    // Which deploy an error came from. Vercel injects both automatically.
+    environment: process.env.NEXT_PUBLIC_VERCEL_ENV ?? "development",
+    release: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA,
+
+    // GlitchTip does not implement session tracking, so the release-health
+    // sessions the browser SDK sends by default are ingested by nothing.
+    // The SDK's old `autoSessionTracking: false` switch (which GlitchTip's
+    // setup docs still reference) was removed in v9; in v10 the equivalent
+    // is dropping the BrowserSession integration.
+    integrations: (defaults) => defaults.filter((i) => i.name !== "BrowserSession"),
 
     dataCollection: {
       // To disable sending user data and HTTP bodies, uncomment the lines below. For more info visit:

@@ -14,7 +14,11 @@ if (dsn) {
 
     // Sampled low to stay inside GlitchTip's free 1,000 events/month —
     // see the note in src/instrumentation-client.ts.
-    tracesSampleRate: 0.05,
+    tracesSampleRate: 0.01,
+
+    // Which deploy an error came from. Vercel injects both automatically.
+    environment: process.env.VERCEL_ENV ?? "development",
+    release: process.env.VERCEL_GIT_COMMIT_SHA,
 
     dataCollection: {
       // To disable sending user data and HTTP bodies, uncomment the lines below. For more info visit:

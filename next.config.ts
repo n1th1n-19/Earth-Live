@@ -200,11 +200,13 @@ const nextConfig: NextConfig = {
 // sentry.*.config.ts) — so every sentry.io-specific build step is switched
 // off here:
 //
-//  - `org`/`project` and source-map upload target Sentry's own SaaS upload
-//    API, which GlitchTip does not implement. Leaving them on would fail (or
-//    silently no-op) every build and needs a SENTRY_AUTH_TOKEN this project
-//    no longer has. Stack traces stay readable because Next emits source maps
-//    that the browser resolves locally.
+//  - Source-map upload. GlitchTip *does* accept uploads (point the plugin at
+//    it with `sentryUrl` + `org`/`project` and a GlitchTip auth token, or use
+//    glitchtip-cli), so this is off by choice, not incapability: it needs an
+//    auth token and org/project slugs that aren't configured here. Stack
+//    traces stay readable because Next emits source maps the browser resolves
+//    locally. To turn it on, set the token and add
+//    `sentryUrl: "https://app.glitchtip.com"` alongside org/project below.
 //  - `automaticVercelMonitors` instruments Sentry Crons, another product
 //    GlitchTip doesn't ingest.
 //
