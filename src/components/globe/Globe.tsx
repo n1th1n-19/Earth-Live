@@ -34,74 +34,49 @@ import {
   Cartesian3,
   Cartographic,
   Color,
-  createWorldImageryAsync,
-  createWorldTerrainAsync,
   EllipsoidTerrainProvider,
-  GeographicTilingScheme,
-  ImageryLayer,
-  Ion,
-  IonWorldImageryStyle,
   Math as CesiumMath,
-  OpenStreetMapImageryProvider,
-  Rectangle,
-  WebMapTileServiceImageryProvider,
 } from "cesium";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Entity,
-  ImageryLayer as ResiumImageryLayer,
-  PointGraphics,
-  PolylineGraphics,
-  Viewer,
-} from "resium";
+import { Entity, PointGraphics, PolylineGraphics, Viewer } from "resium";
 import type { Viewer as CesiumViewer } from "cesium";
 import { useUiStore } from "@/lib/store";
 import { totalPathDistanceKm, type LatLon } from "@/lib/geo-math";
 import { formatDistanceKm } from "@/lib/units";
 import { FloatingControls } from "@/components/globe/FloatingControls";
+import { GlobeTooltip, type HoverTarget } from "@/components/globe/GlobeTooltip";
 import { AuroraLayer } from "@/components/globe/layers/AuroraLayer";
+import { BordersLayer } from "@/components/globe/layers/BordersLayer";
+import { UserLocationMarker } from "@/components/globe/layers/UserLocationMarker";
 import { EarthquakeLayer } from "@/components/globe/layers/EarthquakeLayer";
 import { FlightsLayer } from "@/components/globe/layers/FlightsLayer";
 import { IssLayer } from "@/components/globe/layers/IssLayer";
+import { PlacesLayer } from "@/components/globe/layers/PlacesLayer";
 import { WildfireLayer } from "@/components/globe/layers/WildfireLayer";
 
 // Primary globe engine per docs/03-architecture.md §3.2: CesiumJS, chosen for
 // its native WGS84 globe, real-time sun/lighting, and terrain streaming.
 //
-// Base imagery is satellite (Cesium ion's world imagery, Bing Maps Aerial —
-// free ion tier) when NEXT_PUBLIC_CESIUM_ION_TOKEN is configured, falling
-// back to free OpenStreetMap raster tiles (no key, attribution required —
-// docs/05-api-integration-guide.md §5.5) if it isn't. Terrain is still the
-// default ellipsoid regardless — that's a separate swap
-// (docs/05-api-integration-guide.md §5.9), not requested here.
-const ionToken = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN;
-if (ionToken) {
-  Ion.defaultAccessToken = ionToken;
-}
-
+// Wireframe look: a flat black globe with no imagery, real country borders
+// (Natural Earth 1:110m, public domain — public/data/ne_110m_admin_0_countries.geojson,
+// bundled static rather than fetched from GitHub at runtime). No ion token,
+// no photoreal imagery/terrain — that whole path (Bing aerial, real terrain
+// relief, GIBS clouds/night-lights) was removed in favor of this; see git
+// history and TODO.md if it's ever wanted back.
+//
 // EllipsoidTerrainProvider is stateless (pure math, no GPU resources) so a
-// module-level singleton is fine. The imagery layer is NOT — Cesium caches
-// WebGL textures inside it that are bound to whichever Viewer/context last
-// used it, so sharing one instance across remounts (React Fast Refresh, a
-// StrictMode double-mount) throws "bindTexture: object does not belong to
-// this context" once a second Viewer's context tries to reuse it. It's
-// created fresh per Globe instance below instead.
+// module-level singleton is fine — same flat sphere the wireframe reference
+// image shows, no relief needed.
 const ellipsoidTerrain = new EllipsoidTerrainProvider();
 
-// NASA GIBS — keyless, free, no ion token needed (independent of the
-// imagery/terrain ion gating above). This file has already shipped two
-// production bugs from unverified tile-host/param assumptions (see the CSP
-// comment in next.config.ts), so every value below came from a real request,
-// not the docs: gibs.earthdata.nasa.gov serves both layers directly (no
-// redirect); tiles are 512x512 (Cesium defaults to 256); true-color 250m
-// tops out at zoom 8 and city-lights 500m at zoom 7 (both 400 past that).
-// "Yesterday" for true-color because near-real-time processing lags behind
-// "today" by up to a day — verified live on 2026-07-25.
-function gibsDateISO(daysAgo: number): string {
-  return new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
+// Whole-globe framing — the view the app opens on, and where it stays when
+// the user's location resolves.
+const GLOBAL_VIEW_HEIGHT_M = 20_000_000;
 
-const GIBS_RECTANGLE = Rectangle.fromDegrees(-180, -90, 180, 90);
+// One rotation per sidereal day: the Earth's real rotation period relative
+// to the fixed stars (86,164.0905s), not the 86,400s mean solar day.
+const SIDEREAL_DAY_SECONDS = 86_164.0905;
+const EARTH_ROTATION_RAD_PER_SEC = (2 * Math.PI) / SIDEREAL_DAY_SECONDS;
 
 interface GlobeProps {
   latitude: number | null;
@@ -141,107 +116,56 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   }, []);
 
   const activeLayers = useUiStore((s) => s.activeLayers);
-  const showClouds = activeLayers.includes("clouds");
   const units = useUiStore((s) => s.units);
   const setCameraPosition = useUiStore((s) => s.setCameraPosition);
   const setCursorCoordinates = useUiStore((s) => s.setCursorCoordinates);
   const flyToTarget = useUiStore((s) => s.flyToTarget);
   const clearFlyTo = useUiStore((s) => s.clearFlyTo);
+  const earthRotation = useUiStore((s) => s.earthRotation);
 
   const [measuring, setMeasuring] = useState(false);
   const [measurePoints, setMeasurePoints] = useState<LatLon[]>([]);
+  const [hoverTarget, setHoverTarget] = useState<HoverTarget | null>(null);
+  // Latest un-picked cursor position, and the frame scheduled to pick it —
+  // see handleMouseMove.
+  const pendingHoverRef = useRef<Cartesian2 | null>(null);
+  const hoverFrameRef = useRef<number | null>(null);
 
-  // Fresh per mount — see the comment on `ellipsoidTerrain` above. Satellite
-  // imagery via ion when a token is configured; ImageryLayer.fromProviderAsync
-  // accepts the provider promise directly, no need to await it here.
-  const baseImageryLayer = useMemo(
-    () =>
-      ionToken
-        ? ImageryLayer.fromProviderAsync(createWorldImageryAsync({ style: IonWorldImageryStyle.AERIAL }))
-        : new ImageryLayer(
-            new OpenStreetMapImageryProvider({
-              url: "https://tile.openstreetmap.org/",
-              credit: "© OpenStreetMap contributors",
-            }),
-          ),
-    [],
-  );
-
-  // Real relief instead of a flat sphere, when an ion token is configured —
-  // docs/05-api-integration-guide.md §5.9. Falls back to the flat ellipsoid
-  // (module-level, see comment above) rather than failing the whole globe.
-  const worldTerrainProvider = useMemo(
-    () =>
-      ionToken
-        ? createWorldTerrainAsync({ requestVertexNormals: true, requestWaterMask: true })
-        : ellipsoidTerrain,
-    [],
-  );
-
-  // Real satellite true-color imagery, semi-transparent overlay on top of
-  // the (cloud-free-by-design) base layer — actual visible cloud cover, not
-  // an isolated cloud mask (GIBS doesn't offer one), so land/ocean color
-  // shows through at this alpha. Off by default (toggled via the "clouds"
-  // layer) since it's an extra ~1-day-old tile fetch on top of the base map.
-  const cloudsProvider = useMemo(
-    () =>
-      new WebMapTileServiceImageryProvider({
-        url: `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${gibsDateISO(1)}/250m/{TileMatrix}/{TileRow}/{TileCol}.jpg`,
-        layer: "VIIRS_SNPP_CorrectedReflectance_TrueColor",
-        style: "default",
-        format: "image/jpeg",
-        tileMatrixSetID: "250m",
-        tileWidth: 512,
-        tileHeight: 512,
-        maximumLevel: 8,
-        tilingScheme: new GeographicTilingScheme(),
-        rectangle: GIBS_RECTANGLE,
-        credit: "NASA GIBS / VIIRS (true color, ~1 day lag)",
-      }),
-    [],
-  );
-
-  // NASA Black Marble (VIIRS City Lights 2012) — a static dataset, not live,
-  // but cheap and always on: Cesium's built-in dayAlpha/nightAlpha blends it
-  // in only on the night side, computed from the same real sun position the
-  // enableLighting terminator below already uses. No manual terminator math.
-  // colorToAlpha punches out the image's black background (most of every
-  // tile — no city, no lights) so only actual lit pixels draw; without it,
-  // nightAlpha=1 draws the *whole* near-black image fully opaque over the
-  // entire night hemisphere, hiding the real base imagery underneath it —
-  // exactly what "half the Earth isn't loading" turned out to be.
-  const nightLightsProvider = useMemo(
-    () =>
-      new WebMapTileServiceImageryProvider({
-        url: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/VIIRS_CityLights_2012/default/2012-01-01/500m/{TileMatrix}/{TileRow}/{TileCol}.jpg",
-        layer: "VIIRS_CityLights_2012",
-        style: "default",
-        format: "image/jpeg",
-        tileMatrixSetID: "500m",
-        tileWidth: 512,
-        tileHeight: 512,
-        maximumLevel: 7,
-        tilingScheme: new GeographicTilingScheme(),
-        rectangle: GIBS_RECTANGLE,
-        credit: "NASA Black Marble (VIIRS City Lights 2012)",
-      }),
+  useEffect(
+    () => () => {
+      if (hoverFrameRef.current !== null) cancelAnimationFrame(hoverFrameRef.current);
+    },
     [],
   );
 
   // Real-time day/night terminator (FR-1) — Cesium computes this from actual
-  // sun position once lighting is enabled; no custom math needed. Atmosphere
-  // shift tuned for a richer sky halo than Cesium's flatter defaults.
+  // sun position once lighting is enabled; no custom math needed. Kept even
+  // without imagery: it's real data, not photoreal-specific. baseColor is
+  // the wireframe look's black globe surface.
+  //
+  // Resium's async Viewer construction (queueMicrotask + await inside
+  // mount()) isn't guaranteed to have populated viewerRef.current by the
+  // time this effect's single [] pass runs — confirmed live: the globe
+  // rendered Cesium's default blue, meaning this silently no-op'd on first
+  // mount. Unlike the moveEnd/cinematic-flyby effects below, this one has no
+  // prop (like latitude/longitude) that changes after mount to give it a
+  // natural second attempt, so it needs its own retry until the ref is live.
   useEffect(() => {
-    const viewer = getLiveViewer();
-    if (viewer) {
-      viewer.scene.globe.enableLighting = true;
-      const { skyAtmosphere } = viewer.scene;
-      if (skyAtmosphere) {
-        skyAtmosphere.hueShift = -0.02;
-        skyAtmosphere.saturationShift = 0.15;
-        skyAtmosphere.brightnessShift = -0.1;
+    let cancelled = false;
+    function apply() {
+      if (cancelled) return;
+      const viewer = getLiveViewer();
+      if (!viewer) {
+        requestAnimationFrame(apply);
+        return;
       }
+      viewer.scene.globe.enableLighting = true;
+      viewer.scene.globe.baseColor = Color.BLACK;
     }
+    apply();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // FR-25/26: sample camera pose on moveEnd for share-URL encoding
@@ -266,22 +190,71 @@ export function Globe({ latitude, longitude }: GlobeProps) {
     };
   }, [setCameraPosition]);
 
-  // Cinematic intro (FR-1 polish): snap instantly to a far-out space view
-  // above the target, then fly down — reads as "arriving at Earth" rather
-  // than an instant cut straight to street-ish altitude.
+  // Resolving the user's location only re-centres the globe on them — it no
+  // longer zooms in. Granting location permission used to trigger a 3s fly
+  // down to 1,500km, which yanked the user out of the whole-globe view they
+  // were looking at; the location is now shown by UserLocationMarker instead
+  // (an explicit "Recenter on my location" control still exists for when a
+  // close-up actually is wanted).
+  //
+  // Retries on animation frames until the Viewer exists, for the same reason
+  // the lighting effect above does: Resium builds it asynchronously, so when
+  // geolocation resolves before that finishes this would otherwise no-op
+  // once and never re-centre.
   useEffect(() => {
-    const viewer = getLiveViewer();
-    if (!viewer || latitude == null || longitude == null || hasFlownRef.current) return;
+    if (latitude == null || longitude == null || hasFlownRef.current) return;
 
-    hasFlownRef.current = true;
-    viewer.camera.setView({
-      destination: Cartesian3.fromDegrees(longitude, latitude, 20_000_000),
-    });
-    viewer.camera.flyTo({
-      destination: Cartesian3.fromDegrees(longitude, latitude, 1_500_000),
-      duration: 3,
-    });
+    let cancelled = false;
+    function apply() {
+      if (cancelled || latitude == null || longitude == null) return;
+      const viewer = getLiveViewer();
+      if (!viewer) {
+        requestAnimationFrame(apply);
+        return;
+      }
+      hasFlownRef.current = true;
+      viewer.camera.setView({
+        destination: Cartesian3.fromDegrees(longitude, latitude, GLOBAL_VIEW_HEIGHT_M),
+      });
+    }
+    apply();
+    return () => {
+      cancelled = true;
+    };
   }, [latitude, longitude]);
+
+  // Real-time Earth rotation. Cesium's globe is fixed to the Earth-centred
+  // frame, so "the Earth spinning" is expressed by orbiting the camera
+  // westward at the planet's true angular rate. That rate is one turn per
+  // sidereal day (86,164s — the real rotation period against the stars, not
+  // the 86,400s solar day), i.e. ~15°/hour: correct, and therefore slow
+  // enough to read as drift rather than a spin.
+  //
+  // Paused while the user is interacting or a fly-to is running, otherwise
+  // it would fight their input; resumes once the camera settles.
+  useEffect(() => {
+    if (!earthRotation) return;
+    let frame = 0;
+    let last = performance.now();
+
+    function tick(now: number) {
+      const viewer = getLiveViewer();
+      if (viewer && !viewer.scene.screenSpaceCameraController.enableInputs) {
+        last = now;
+        frame = requestAnimationFrame(tick);
+        return;
+      }
+      if (viewer) {
+        const elapsedSeconds = (now - last) / 1000;
+        viewer.camera.rotate(Cartesian3.UNIT_Z, -EARTH_ROTATION_RAD_PER_SEC * elapsedSeconds);
+      }
+      last = now;
+      frame = requestAnimationFrame(tick);
+    }
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [earthRotation]);
 
   // Command palette / search "fly to" requests (FR-12) and the recenter
   // control both funnel through the same store field.
@@ -312,10 +285,46 @@ export function Globe({ latitude, longitude }: GlobeProps) {
     };
   }
 
+  // Hover readout: whatever entity is under the cursor identifies itself via
+  // its own `name`/`description`, so this works for every layer (flights,
+  // ISS, quakes, fires, capitals) without per-layer wiring.
+  //
+  // scene.pick renders an offscreen pick pass, which is far too expensive to
+  // run on every mousemove — the browser fires those faster than frames. Only
+  // the most recent cursor position is kept, and it's picked once per frame.
+  function runHoverPick(position: Cartesian2) {
+    const viewer = getLiveViewer();
+    if (!viewer) return;
+    const picked = viewer.scene.pick(position);
+    const entity = picked?.id;
+    const label = typeof entity?.name === "string" ? entity.name : null;
+    if (!label) {
+      setHoverTarget(null);
+      return;
+    }
+    // Entity.description is a Cesium Property, not a bare string — each
+    // layer sets it to a one-line summary for exactly this readout.
+    const description = entity?.description?.getValue?.(viewer.clock.currentTime);
+    setHoverTarget({
+      label,
+      detail: typeof description === "string" ? description : undefined,
+      x: position.x,
+      y: position.y,
+    });
+  }
+
   function handleMouseMove(movement: { endPosition?: Cartesian2 }) {
     if (!movement.endPosition) return;
     const coords = pickEllipsoidCoordinates(movement.endPosition);
     setCursorCoordinates(coords);
+
+    pendingHoverRef.current = movement.endPosition.clone();
+    if (hoverFrameRef.current !== null) return;
+    hoverFrameRef.current = requestAnimationFrame(() => {
+      hoverFrameRef.current = null;
+      const position = pendingHoverRef.current;
+      if (position) runHoverPick(position);
+    });
   }
 
   function handleClick(movement: { position?: Cartesian2 }) {
@@ -412,7 +421,7 @@ export function Globe({ latitude, longitude }: GlobeProps) {
   // That's what "<Viewer> is recreated because..." in the console meant, and
   // why zoomIn/zoomOut/recenter/screenshot then threw on a mid-teardown
   // cesiumElement. Same stable-reference treatment as hiddenCreditsContainer
-  // and baseImageryLayer above.
+  // above.
   const contextOptions = useMemo(() => ({ webgl: { preserveDrawingBuffer: true } }), []);
 
   const measureDistanceKm = totalPathDistanceKm(measurePoints);
@@ -422,8 +431,8 @@ export function Globe({ latitude, longitude }: GlobeProps) {
       <Viewer
         ref={viewerRef}
         full
-        baseLayer={baseImageryLayer}
-        terrainProvider={worldTerrainProvider}
+        baseLayer={false}
+        terrainProvider={ellipsoidTerrain}
         contextOptions={contextOptions}
         creditContainer={hiddenCreditsContainer}
         animation={false}
@@ -439,20 +448,15 @@ export function Globe({ latitude, longitude }: GlobeProps) {
         onMouseMove={handleMouseMove}
         onClick={handleClick}
       >
-        <ResiumImageryLayer
-          imageryProvider={nightLightsProvider}
-          dayAlpha={0}
-          nightAlpha={1}
-          colorToAlpha={Color.BLACK}
-          colorToAlphaThreshold={0.2}
-        />
-        {showClouds && <ResiumImageryLayer imageryProvider={cloudsProvider} alpha={0.55} />}
+        <BordersLayer />
+        <UserLocationMarker latitude={latitude} longitude={longitude} />
         <AuroraLayer />
 
         {activeLayers.includes("earthquakes") && <EarthquakeLayer />}
         {activeLayers.includes("flights") && <FlightsLayer />}
         {activeLayers.includes("iss") && <IssLayer />}
         {activeLayers.includes("wildfires") && <WildfireLayer />}
+        {activeLayers.includes("places") && <PlacesLayer />}
 
         {measurePoints.map((point, i) => (
           <Entity key={i} position={Cartesian3.fromDegrees(point.longitude, point.latitude)}>
@@ -472,6 +476,8 @@ export function Globe({ latitude, longitude }: GlobeProps) {
           </Entity>
         )}
       </Viewer>
+
+      <GlobeTooltip target={hoverTarget} />
 
       <div className="pointer-events-none absolute bottom-4 right-4 z-10">
         <FloatingControls

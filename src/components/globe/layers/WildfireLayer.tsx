@@ -1,9 +1,10 @@
 "use client";
 
 import { Cartesian3, Color } from "cesium";
-import { CustomDataSource, Entity, PointGraphics } from "resium";
+import { BillboardGraphics, CustomDataSource, Entity } from "resium";
 import { useWildfires } from "@/lib/use-wildfires";
 import { useEntityClustering } from "@/lib/use-entity-clustering";
+import { getGlowDataUri } from "@/lib/glow-billboard";
 import { useUiStore } from "@/lib/store";
 import type { FireDetection } from "@/lib/adapters/firms";
 
@@ -29,11 +30,11 @@ export function WildfireLayer() {
           name="Fire detection"
           onClick={() => setSelectedEvent(toSelectedEvent(fire))}
         >
-          <PointGraphics
-            pixelSize={5}
+          <BillboardGraphics
+            image={getGlowDataUri()}
             color={Color.ORANGERED.withAlpha(0.85)}
-            outlineColor={Color.BLACK}
-            outlineWidth={0.5}
+            width={26}
+            height={26}
           />
         </Entity>
       ))}

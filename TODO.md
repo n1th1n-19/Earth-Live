@@ -38,7 +38,8 @@ Auth is explicitly out of scope per product decision — every Phase 1 auth item
   - [x] **GeoNames (timezone)** → inline in `WeatherPanel`
   - [x] **NASA DONKI (space weather events)** → expandable list in `SpaceWeatherPanel`
 - Not started (unchanged from before, still real gaps):
-  - [ ] Open-Meteo elevation, NWS alerts, NOAA radar, Smithsonian GVP volcanoes, GDACS, NASA EPIC/APOD/NeoWs, OurAirports, NOAA NDBC/CO-OPS/NHC, REST Countries/Wikidata, Blitzortung lightning, AISHub ships
+  - [x] **adsbdb.com (flight routes)** → `FlightsLayer` — lazy, per-selection callsign→route lookup; draws a real great-circle line when resolvable, no fallback otherwise
+  - [ ] Open-Meteo elevation, NWS alerts, NOAA radar, Smithsonian GVP volcanoes, GDACS, NASA EPIC/APOD/NeoWs, OurAirports, NOAA NDBC/CO-OPS/NHC, Wikidata, Blitzortung lightning, AISHub ships
 - [ ] SSE endpoints for ISS + flights fan-out *(still client polling — fine at current scale)*
 - [x] Redis-backed rate limiter — `/api/geocode`
 - [ ] Scheduled cron (cache pre-warming, notification sweep, bulk re-sync) — **still blocked**, needs an interactive `vercel link` this environment can't run
@@ -46,18 +47,20 @@ Auth is explicitly out of scope per product decision — every Phase 1 auth item
 ## Phase 3 — Globe core
 
 - [x] CesiumJS + Resium, code-split
-- [x] **Cesium World Terrain** — wired via `createWorldTerrainAsync` (vertex normals + water mask) when `NEXT_PUBLIC_CESIUM_ION_TOKEN` is set, falling back to `EllipsoidTerrainProvider`. Real terrain tiles confirmed live from `assets.ion.cesium.com` (a different host than `api.cesium.com` — added to CSP separately, `*.cesium.com` doesn't cover it).
-- [x] OSM imagery, real-time lighting, camera + fly-to, measurement tool, screenshot/fullscreen, WASD fly controls
+- [x] **Wireframe globe (current look)** — black `globe.baseColor`, no imagery/terrain provider (`EllipsoidTerrainProvider`, flat), real country borders (`<GeoJsonDataSource>`, Natural Earth 1:110m, bundled static at `public/data/ne_110m_admin_0_countries.geojson`) and a generated lat/long graticule (`src/lib/graticule.ts`), both as glowing lines (`PolylineGlowMaterialProperty`). Replaces the photoreal build below by explicit request — see git history for that version if it's ever wanted back.
+- [x] ~~Cesium World Terrain, Bing/OSM base imagery, GIBS true-color cloud overlay, GIBS Black Marble night-lights overlay, `skyAtmosphere` hue/saturation/brightness tuning~~ — **removed**, superseded by the wireframe globe above. `NEXT_PUBLIC_CESIUM_ION_TOKEN` is now unused (left in `.env.example`, harmless).
+- [x] **Real low-poly 3D models** — flights and the ISS render as real glTF models (`public/models/airplane.glb`, CC-BY 3.0 via Poly Pizza; `public/models/satellite.glb`, CC0 via Kenney), not flat icons. Flights orient to real `headingDeg` via `Transforms.headingPitchRollQuaternion`. Replaces the earlier `icon-billboard.ts` icon system (deleted).
+- [x] **Glow markers** — earthquakes/wildfires render as soft radial-gradient glow billboards (`src/lib/glow-billboard.ts`) instead of technical icon glyphs, readable without knowing what a seismograph/flame pictogram means; size/color still driven by real magnitude/brightness.
+- [x] **Capital-city places layer** — 199 real national capitals (Natural Earth `ne_110m_populated_places.geojson`, filtered to `ADM0CAP === 1`, bundled static at `public/data/capitals.geojson`) render as glow dots with zoom-gated name labels (`PlacesLayer.tsx`). REST Countries (originally planned) turned out to require an API key as of its v5 migration.
+- [x] Real-time lighting, camera + fly-to, measurement tool, screenshot/fullscreen, WASD fly controls
 - [x] **Wildfire markers**, capped at 1000 (`MAX_FIRES` in `firms.ts` — global VIIRS 24h feed runs 30k-100k+ rows, was crashing the tab before this cap)
 - [x] **Real unit conversion** (metric/imperial) applied to weather, measurement tool, flight altitude/speed — a units toggle that didn't change any number would be fake, so this was built as a real, shared `src/lib/units.ts`
-- [x] **Cloud overlay** — NASA GIBS true-color VIIRS imagery (real satellite pixels, ~1 day lag; GIBS has no isolated cloud-mask layer), toggleable, off by default
-- [x] **Night-lights overlay** — NASA Black Marble (VIIRS City Lights 2012, static dataset) via Cesium's built-in `dayAlpha`/`nightAlpha`, always on, blended in only on the real night side
-- [x] **Marker clustering** — earthquakes/flights/wildfires now render inside a `<CustomDataSource clustering={...}>` (`src/lib/use-entity-clustering.ts`) instead of a flat `<Entity>` list
+- [x] **Marker clustering** — earthquakes/flights/wildfires now render inside a `<CustomDataSource clustering={...}>` (`src/lib/use-entity-clustering.ts`) instead of a flat `<Entity>` list; clusters billboards the same as it clustered points before
 - [x] **Earthquake heatmap mode** — toggle in the layer panel; canvas-generated additive-blob density map (not a real KDE), same "approximation, disclosed" spirit as the FIRMS caveat
 - [x] **Flight trails** — short fading polyline per aircraft, built from real positions accumulated client-side across polls (OpenSky's free tier has no historical track endpoint)
 - [x] **Aurora oval** — approximate geomagnetic-pole ellipses, always on, sized/gated by the real live Kp index (`/api/space-weather`) — not the real OVATION model, disclosed as such
-- [x] Atmosphere tuned (`skyAtmosphere` hue/saturation/brightness shift) + cinematic space-to-target intro flyby
-- [ ] MapLibre minimap, 3D buildings/borders/roads/population — **still not started**, these need offline tile-processing pipelines outside a single session's scope
+- [x] Cinematic space-to-target intro flyby
+- [ ] MapLibre minimap, 3D buildings/roads/population — **still not started**, these need offline tile-processing pipelines outside a single session's scope
 
 ## Phase 4 — Location & personalization
 
@@ -89,7 +92,7 @@ Auth is explicitly out of scope per product decision — every Phase 1 auth item
 
 ## Phase 7 — Testing & hardening
 
-- [x] **Vitest coverage for all 11 adapters now** (was 1 of 11) — 14 test files, 28 tests, all passing. Fixtures use the real response shapes verified live this session (including the 3 schema bugs found and fixed earlier: CelesTrak TLE format, SWPC object shape, sunrise-sunset integer day_length).
+- [x] **Vitest coverage for all 12 adapters now** (was 1 of 11) — 15 test files, 30 tests, all passing. Fixtures use the real response shapes verified live this session (including the 3 schema bugs found and fixed earlier: CelesTrak TLE format, SWPC object shape, sunrise-sunset integer day_length).
 - [ ] Playwright E2E — not started
 - [ ] Scheduled CI canary workflow — not started (the new `ci.yml` covers lint/typecheck/test/build, not a live-shape diff job)
 - [x] **CSP + security headers** — `next.config.ts` now sets Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy. CORS: no headers added anywhere, which is the correct locked-down (same-origin-only) state per docs — nothing to add.

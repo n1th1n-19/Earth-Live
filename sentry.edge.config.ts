@@ -1,23 +1,23 @@
-// This file configures the initialization of Sentry for edge features (middleware, edge routes, and so on).
-// The config you add here will be used whenever one of the edge features is loaded.
-// Note that this config is unrelated to the Vercel Edge Runtime and is also required when running locally.
-// https://docs.sentry.io/platforms/javascript/guides/nextjs/
-
+// Edge-runtime error reporting (middleware, edge routes). Points at
+// GlitchTip, which implements Sentry's ingest protocol — the @sentry/nextjs
+// SDK is unchanged, only the DSN differs.
+//
+// Server-only env var (no NEXT_PUBLIC_ prefix). Unset means error reporting
+// is off entirely.
 import * as Sentry from "@sentry/nextjs";
 
-Sentry.init({
-  dsn: "https://392298ed5c8bbfaeee8876d43fce311e@o4511796896923648.ingest.de.sentry.io/4511796900724816",
+const dsn = process.env.GLITCHTIP_DSN;
 
-  // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-  tracesSampleRate: 1,
+if (dsn) {
+  Sentry.init({
+    dsn,
 
-  // Enable logs to be sent to Sentry
-  enableLogs: true,
+    // Sampled low to stay inside GlitchTip's free 1,000 events/month —
+    // see the note in src/instrumentation-client.ts.
+    tracesSampleRate: 0.01,
 
-  dataCollection: {
-    // To disable sending user data and HTTP bodies, uncomment the lines below. For more info visit:
-    // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#dataCollection
-    // userInfo: false,
-    // httpBodies: [],
-  },
-});
+    // Which deploy an error came from. Vercel injects both automatically.
+    environment: process.env.VERCEL_ENV ?? "development",
+    release: process.env.VERCEL_GIT_COMMIT_SHA,
+  });
+}

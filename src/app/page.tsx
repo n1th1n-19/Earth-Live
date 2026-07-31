@@ -171,7 +171,10 @@ export default function Home() {
       </div>
 
       {mobileMenuOpen && (
-        <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-20 rounded-t-2xl border-t border-white/10 bg-black/80 p-4 backdrop-blur-2xl sm:hidden">
+        // z-40 keeps the menu above the event-detail popup (z-30). At z-20 the
+        // popup covered it, so opening the menu with a marker selected showed
+        // the popup on top of the menu the user had just asked for.
+        <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 rounded-t-2xl border-t border-white/10 bg-black/80 p-4 backdrop-blur-2xl sm:hidden">
           <div className="mb-3 flex items-center justify-between">
             <span className="text-xs uppercase tracking-wide text-neutral-400">Menu</span>
             <button
@@ -192,8 +195,12 @@ export default function Home() {
         <SpaceWeatherPanel />
       </div>
 
-      {/* Event detail — right side on desktop, full-width sheet on mobile */}
-      <div className="pointer-events-none absolute inset-x-4 bottom-20 z-10 flex justify-end sm:inset-x-auto sm:right-4">
+      {/* Event detail popup. Offset to `right-20` on desktop so it clears
+          the floating control column (bottom-4 right-4) instead of sitting
+          on top of it; on mobile it's a bottom sheet raised above the same
+          controls. It overlays the globe only — never the other panels —
+          and is absolutely positioned, so showing it never reflows them. */}
+      <div className="pointer-events-none absolute inset-x-4 bottom-24 z-30 flex justify-center sm:inset-x-auto sm:bottom-4 sm:right-20 sm:justify-end">
         <EventDetailPanel />
       </div>
     </div>

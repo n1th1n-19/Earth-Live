@@ -1,34 +1,38 @@
-// This file configures the initialization of Sentry on the client.
-// The added config here will be used whenever a users loads a page in their browser.
-// https://docs.sentry.io/platforms/javascript/guides/nextjs/
-
+// Client-side error reporting. Points at GlitchTip (MIT-licensed, free
+// hosted tier), which implements Sentry's ingest protocol — so the
+// @sentry/nextjs SDK stays exactly as-is and only the DSN changes.
+//
+// The DSN is read from NEXT_PUBLIC_GLITCHTIP_DSN rather than hardcoded (it
+// previously was, committed into the repo). Unset means error reporting is
+// simply off — no init, no network calls.
+//
+// Session Replay is deliberately not enabled: it's a Sentry-specific product
+// that GlitchTip does not ingest, so it would ship a sizeable bundle and
+// record user sessions with nowhere to send them.
 import * as Sentry from "@sentry/nextjs";
 
-Sentry.init({
-  dsn: "https://392298ed5c8bbfaeee8876d43fce311e@o4511796896923648.ingest.de.sentry.io/4511796900724816",
+const dsn = process.env.NEXT_PUBLIC_GLITCHTIP_DSN;
 
-  // Add optional integrations for additional features
-  integrations: [Sentry.replayIntegration()],
+if (dsn) {
+  Sentry.init({
+    dsn,
 
-  // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-  tracesSampleRate: 1,
-  // Enable logs to be sent to Sentry
-  enableLogs: true,
+    // GlitchTip's free tier allows 1,000 events/month and its own docs
+    // recommend ~1% in production; errors are the point here, and a high
+    // trace rate would burn the monthly allowance on routine traffic.
+    tracesSampleRate: 0.01,
 
-  // Define how likely Replay events are sampled.
-  // This sets the sample rate to be 10%. You may want this to be 100% while
-  // in development and sample at a lower rate in production
-  replaysSessionSampleRate: 0.1,
+    // Which deploy an error came from. Vercel injects both automatically.
+    environment: process.env.NEXT_PUBLIC_VERCEL_ENV ?? "development",
+    release: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA,
 
-  // Define how likely Replay events are sampled when an error occurs.
-  replaysOnErrorSampleRate: 1.0,
-
-  dataCollection: {
-    // To disable sending user data and HTTP bodies, uncomment the lines below. For more info visit:
-    // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#dataCollection
-    // userInfo: false,
-    // httpBodies: [],
-  },
-});
+    // GlitchTip does not implement session tracking, so the release-health
+    // sessions the browser SDK sends by default are ingested by nothing.
+    // The SDK's old `autoSessionTracking: false` switch (which GlitchTip's
+    // setup docs still reference) was removed in v9; in v10 the equivalent
+    // is dropping the BrowserSession integration.
+    integrations: (defaults) => defaults.filter((i) => i.name !== "BrowserSession"),
+  });
+}
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

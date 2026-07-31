@@ -7,15 +7,24 @@ import { persist } from "zustand/middleware";
 // (liveness badge is only honest if the layer actually does something).
 // Clouds/night-lights/borders/etc. from the full docs/02 layer table are not
 // implemented yet — deliberately not exposed as togglable here.
-export type LayerId = "weather" | "earthquakes" | "flights" | "iss" | "wildfires" | "clouds";
+export type LayerId = "weather" | "earthquakes" | "flights" | "iss" | "wildfires" | "places";
 
 export interface SelectedEvent {
-  kind: "earthquake" | "flight" | "iss" | "satellite" | "wildfire";
+  kind: "earthquake" | "flight" | "iss" | "satellite" | "wildfire" | "place";
   title: string;
   attributes: { label: string; value: string }[];
   sourceUrl?: string;
   latitude: number;
   longitude: number;
+  /**
+   * Real ICAO callsign, flights only. Kept separate from `title` because
+   * that falls back to the icao24 hex id when a flight is broadcasting no
+   * callsign — feeding that fallback to adsbdb would be a guaranteed miss.
+   */
+  callsign?: string;
+  /** Capital-city places only — used to look up the place's own detail. */
+  placeName?: string;
+  country?: string;
 }
 
 export interface Bookmark {
@@ -52,6 +61,11 @@ interface UiState {
   earthquakeHeatmap: boolean;
   setEarthquakeHeatmap: (on: boolean) => void;
 
+  // Drifts the camera westward at the Earth's true sidereal rate (~15°/hr)
+  // so the globe tracks real rotation. A display preference, so persisted.
+  earthRotation: boolean;
+  setEarthRotation: (on: boolean) => void;
+
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
 
@@ -81,7 +95,7 @@ interface UiState {
   setReplayCursor: (iso: string) => void;
 }
 
-const DEFAULT_LAYERS: LayerId[] = ["weather", "earthquakes", "flights", "iss"];
+const DEFAULT_LAYERS: LayerId[] = ["weather", "earthquakes", "flights", "iss", "places"];
 
 export const useUiStore = create<UiState>()(
   persist(
@@ -124,6 +138,9 @@ export const useUiStore = create<UiState>()(
       earthquakeHeatmap: false,
       setEarthquakeHeatmap: (on) => set({ earthquakeHeatmap: on }),
 
+      earthRotation: true,
+      setEarthRotation: (on) => set({ earthRotation: on }),
+
       commandPaletteOpen: false,
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
 
@@ -158,6 +175,7 @@ export const useUiStore = create<UiState>()(
         activeLayers: state.activeLayers,
         bookmarks: state.bookmarks,
         units: state.units,
+        earthRotation: state.earthRotation,
       }),
     },
   ),

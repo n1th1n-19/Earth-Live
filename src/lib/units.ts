@@ -17,3 +17,8 @@ export function formatDistanceKm(km: number, units: Units): string {
   if (units === "imperial") return `${(km / 1.60934).toFixed(1)} mi`;
   return `${km.toFixed(1)} km`;
 }
+
+export function formatPrecipitationMm(mm: number, units: Units): string {
+  if (units === "imperial") return `${(mm / 25.4).toFixed(1)} in`;
+  return `${Math.round(mm).toLocaleString()} mm`;
+}

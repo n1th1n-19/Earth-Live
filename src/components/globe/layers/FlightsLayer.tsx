@@ -1,25 +1,34 @@
 "use client";
 
-import { Fragment, useState } from "react";
-import { Cartesian3, Color } from "cesium";
-import { CustomDataSource, Entity, PointGraphics, PolylineGraphics } from "resium";
+import { Fragment, useMemo, useState } from "react";
+import { ArcType, Cartesian3, Color, HeadingPitchRoll, Math as CesiumMath, PolylineGlowMaterialProperty, Transforms } from "cesium";
+import { Entity, ModelGraphics, PolylineGraphics } from "resium";
 import { useFlights } from "@/lib/use-flights";
-import { useEntityClustering } from "@/lib/use-entity-clustering";
 import { useUiStore } from "@/lib/store";
 import { formatSpeedKmh } from "@/lib/units";
+import { useFlightRoute } from "@/lib/use-flight-route";
 import type { Flight } from "@/lib/adapters/opensky";
 
-// Capped to MAX_FLIGHTS (src/lib/adapters/opensky.ts) and rendered as plain
-// points — heading-aware icons are still a TODO.md Phase 5 item, but
-// clustering (via useEntityClustering) now keeps dense airspace legible.
+// Real low-poly glTF, not a flat icon — public/models/airplane.glb (Poly
+// Pizza, "Poly by Google", CC-BY 3.0 — credited in CreditsPanel.tsx).
+const AIRPLANE_MODEL_URI = "/models/airplane.glb";
+
+// Capped to MAX_FLIGHTS (src/lib/adapters/opensky.ts).
 const TRAIL_LENGTH = 6;
+
+// Clustering used to collapse nearby aircraft into a numeric badge, which
+// meant zooming out replaced every plane with an unexplained number. Dropped
+// in favour of a screen-space floor: minimumPixelSize keeps each aircraft a
+// legible icon at any camera distance, maximumScale stops it ballooning when
+// the camera is right on top of it.
+const MIN_PIXEL_SIZE = 32;
+const MAX_MODEL_SCALE = 12_000;
 
 type LatLon = { latitude: number; longitude: number };
 
 export function FlightsLayer() {
   const { data } = useFlights();
   const setSelectedEvent = useUiStore((s) => s.setSelectedEvent);
-  const clustering = useEntityClustering();
 
   // Real per-aircraft position history accumulated client-side across polls
   // — OpenSky's free anonymous tier doesn't expose historical tracks, so a
@@ -50,11 +59,14 @@ export function FlightsLayer() {
     setTrails(next);
   }
 
-  if (!data) return null;
-
+  // SelectedFlightRoute sits outside the `data` guard: the route line is
+  // driven purely by the current selection, so it must survive a poll that
+  // momentarily returns no flights (or a slow first load) rather than
+  // blinking out with the aircraft list.
   return (
-    <CustomDataSource clustering={clustering}>
-      {data.map((flight) => {
+    <>
+      <SelectedFlightRoute />
+      {data?.map((flight) => {
         const trail = trails.get(flight.icao24);
         return (
           <Fragment key={flight.icao24}>
@@ -72,26 +84,82 @@ export function FlightsLayer() {
                 />
               </Entity>
             ))}
-            <Entity
-              position={Cartesian3.fromDegrees(
+            {(() => {
+              const position = Cartesian3.fromDegrees(
                 flight.longitude,
                 flight.latitude,
                 flight.altitudeM ?? 0,
-              )}
-              name={flight.callsign ?? flight.icao24}
-              onClick={() => setSelectedEvent(toSelectedEvent(flight))}
-            >
-              <PointGraphics
-                pixelSize={6}
-                color={Color.CYAN.withAlpha(0.9)}
-                outlineColor={Color.BLACK}
-                outlineWidth={1}
-              />
-            </Entity>
+              );
+              // Real 3D model orientation, not a flat billboard rotation —
+              // Transforms.headingPitchRollQuaternion computes a real-world
+              // heading/pitch/roll rotation at this exact position.
+              // HeadingPitchRoll.heading is radians clockwise from north,
+              // the same convention OpenSky's headingDeg already uses.
+              const orientation = Transforms.headingPitchRollQuaternion(
+                position,
+                new HeadingPitchRoll(CesiumMath.toRadians(flight.headingDeg ?? 0), 0, 0),
+              );
+              return (
+                <Entity
+                  position={position}
+                  orientation={orientation}
+                  name={flight.callsign ?? flight.icao24}
+                  onClick={() => setSelectedEvent(toSelectedEvent(flight))}
+                >
+                  <ModelGraphics
+                    uri={AIRPLANE_MODEL_URI}
+                    minimumPixelSize={MIN_PIXEL_SIZE}
+                    maximumScale={MAX_MODEL_SCALE}
+                    scale={1}
+                  />
+                </Entity>
+              );
+            })()}
           </Fragment>
         );
       })}
-    </CustomDataSource>
+    </>
+  );
+}
+
+// Real great-circle route line (adsbdb.com), drawn only for the currently
+// selected flight — fetching this for all ~400 tracked aircraft up front
+// would be excessive load for data most users never look at. Callsigns that
+// don't resolve (general aviation, adsbdb only knows scheduled airline
+// routes) draw nothing — no synthesized fallback line.
+function SelectedFlightRoute() {
+  const selectedEvent = useUiStore((s) => s.selectedEvent);
+  // The real broadcast callsign, never `title` — that falls back to the
+  // icao24 hex id, which adsbdb can never resolve.
+  const callsign = selectedEvent?.kind === "flight" ? (selectedEvent.callsign ?? null) : null;
+  const { data: route } = useFlightRoute(callsign);
+
+  // Cesium treats a new Cartesian3[]/material instance as a changed property
+  // and rebuilds the polyline primitive, so these are keyed on the actual
+  // coordinates rather than recreated on every parent re-render.
+  const positions = useMemo(
+    () =>
+      route
+        ? Cartesian3.fromDegreesArray([
+            route.origin.longitude,
+            route.origin.latitude,
+            route.destination.longitude,
+            route.destination.latitude,
+          ])
+        : undefined,
+    [route],
+  );
+  const material = useMemo(
+    () => new PolylineGlowMaterialProperty({ color: Color.CYAN.withAlpha(0.8), glowPower: 0.2 }),
+    [],
+  );
+
+  if (!route || !positions) return null;
+
+  return (
+    <Entity name={`${route.origin.name} → ${route.destination.name}`}>
+      <PolylineGraphics positions={positions} width={3} arcType={ArcType.GEODESIC} material={material} />
+    </Entity>
   );
 }
 
@@ -107,6 +175,7 @@ function toSelectedEvent(flight: Flight) {
   return {
     kind: "flight" as const,
     title: flight.callsign ?? flight.icao24,
+    callsign: flight.callsign ?? undefined,
     attributes: [
       { label: "Origin country", value: flight.originCountry },
       { label: "Altitude", value: altitudeLabel },

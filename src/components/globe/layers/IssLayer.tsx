@@ -2,9 +2,13 @@
 
 import { Cartesian2, Cartesian3, Color } from "cesium";
 import { useEffect, useState } from "react";
-import { Entity, LabelGraphics, PointGraphics } from "resium";
+import { Entity, LabelGraphics, ModelGraphics } from "resium";
 import { useSatelliteGroup } from "@/lib/use-satellites";
 import { propagateTle } from "@/lib/satellite-propagation";
+
+// Real low-poly glTF, not a flat icon — public/models/satellite.glb (Kenney
+// Space Kit's satelliteDish model, CC0 — credited in CreditsPanel.tsx).
+const SATELLITE_MODEL_URI = "/models/satellite.glb";
 
 // ISS position, propagated client-side from CelesTrak TLEs via SGP4 —
 // docs/05-api-integration-guide.md §5.4. Updated every 2s (real orbital
@@ -40,7 +44,9 @@ export function IssLayer() {
 
   return (
     <Entity position={position} name="International Space Station">
-      <PointGraphics pixelSize={10} color={Color.WHITE} outlineColor={Color.CYAN} outlineWidth={2} />
+      {/* minimumPixelSize keeps the ISS a legible icon at whole-globe zoom;
+          maximumScale stops it filling the screen when flown up close. */}
+      <ModelGraphics uri={SATELLITE_MODEL_URI} minimumPixelSize={44} maximumScale={40_000} scale={1} />
       <LabelGraphics
         text="ISS"
         font="12px monospace"
