@@ -37,13 +37,26 @@ import type { NextConfig } from "next";
 // is a documented, unavoidable Cesium requirement in strict-CSP setups, not
 // a bug in this app. `wasm-unsafe-eval` alone (which only covers
 // WebAssembly.instantiate with dynamic code) doesn't cover it.
+//
+// FOLLOW-UP (tracked in docs/10-security-guide.md §10.3): both
+// 'unsafe-inline' and 'unsafe-eval' above are accepted relaxations, not
+// permanent choices. Re-tighten when either precondition lands — Next.js
+// supporting nonce-based RSC streaming without forcing every route dynamic,
+// or Cesium dropping its `jsep`-based eval path. Re-check on each Next.js
+// and Cesium major upgrade.
+//
+// Analytics hosts are listed only so the optional GA integration
+// (src/components/Analytics.tsx) isn't silently CSP-blocked when
+// NEXT_PUBLIC_GA_ID is configured. No other third-party origin is allowed.
+// Place summaries/climate are fetched server-side through this app's own
+// /api/place-info route, so they need no client-side allowlist entry.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://www.googletagmanager.com",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https://www.google-analytics.com https://www.googletagmanager.com",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  "connect-src 'self' https://www.google-analytics.com https://www.googletagmanager.com",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
