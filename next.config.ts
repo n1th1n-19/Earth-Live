@@ -45,18 +45,16 @@ import type { NextConfig } from "next";
 // or Cesium dropping its `jsep`-based eval path. Re-check on each Next.js
 // and Cesium major upgrade.
 //
-// Analytics hosts are listed only so the optional GA integration
-// (src/components/Analytics.tsx) isn't silently CSP-blocked when
-// NEXT_PUBLIC_GA_ID is configured. No other third-party origin is allowed.
-// Place summaries/climate are fetched server-side through this app's own
-// /api/place-info route, so they need no client-side allowlist entry.
+// No third-party origin is allowlisted at all. Place summaries and climate
+// normals are fetched server-side through this app's own /api/place-info
+// route, so they need no client-side entry either.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://www.googletagmanager.com",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://www.google-analytics.com https://www.googletagmanager.com",
+  "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' https://www.google-analytics.com https://www.googletagmanager.com",
+  "connect-src 'self'",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
