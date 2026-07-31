@@ -15,6 +15,8 @@ const LAYERS: { id: LayerId; label: string; category: string; cadence: string }[
   { id: "flights", label: "Flights", category: "Transportation", cadence: "~45 s" },
   { id: "iss", label: "ISS", category: "Space", cadence: "~2 s" },
   { id: "places", label: "Capitals", category: "Places", cadence: "static" },
+  { id: "volcanoes", label: "Volcanoes", category: "Places", cadence: "static" },
+  { id: "airports", label: "Nearby airports", category: "Places", cadence: "static" },
 ];
 
 const CATEGORIES = ["Weather", "Geological", "Transportation", "Space", "Places"];

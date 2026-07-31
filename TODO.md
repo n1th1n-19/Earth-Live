@@ -41,7 +41,9 @@ Auth is explicitly out of scope per product decision — every Phase 1 auth item
   - [x] **adsbdb.com (flight routes)** → `FlightsLayer` — lazy, per-selection callsign→route lookup; draws a real great-circle line when resolvable, no fallback otherwise
   - [x] **GDACS (global disaster alerts)** → `DisastersLayer` — free/keyless, Orange+Red humanitarian-impact tiers only. ~100 active events across floods, wildfires, droughts, quakes, cyclones and volcanoes. Features are parsed individually so one malformed record can't blank the layer.
   - [x] **NOAA/NWS severe weather alerts** → `WeatherAlertsLayer` — real warning polygons, Extreme+Severe only. **Partial by design**: most active alerts carry `geometry: null` and reference zones instead (51 of 62 measured live), so only polygon-bearing alerts are drawn and the layer is labelled "US severe (mapped)".
-  - [ ] NOAA radar, Smithsonian GVP volcanoes, NASA EPIC/APOD/NeoWs, OurAirports, NOAA NDBC/CO-OPS/NHC, Wikidata, Blitzortung lightning, AISHub ships — each still needs its own live schema verification
+  - [x] **Smithsonian GVP volcanoes** → `VolcanoesLayer` — free/keyless, 1196 real Holocene volcanoes, bundled static (`public/data/volcanoes.geojson`, same pattern as capitals). Recently-erupted (last 100y) volcanoes read brighter — a real signal from `Last_Eruption_Year`, not decoration. Off by default.
+  - [x] **OurAirports (nearby airports)** → `AirportsLayer` — free/keyless/no-attribution-required, 5273 large+medium airports bundled static. Also closes the Phase 4 "nearby airports, re-query on viewport shift" item: filtered client-side to the nearest 20 to the real camera target (`cameraPosition`, already sampled on `moveEnd`) rather than a server round trip.
+  - [ ] NOAA radar, NASA EPIC/APOD/NeoWs, NOAA NDBC/CO-OPS/NHC, Wikidata, Blitzortung lightning, AISHub ships — each still needs its own live schema verification
 - [ ] SSE endpoints for ISS + flights fan-out *(still client polling — fine at current scale)*
 - [x] Redis-backed rate limiter — `/api/geocode`
 - [x] **Scheduled cron** — `vercel.ts` `crons` + `/api/cron/prewarm`, CRON_SECRET-authenticated. The "needs an interactive `vercel link`" note was wrong: crons are declared in project config and ship with a deploy. Pre-warms the ~90s FIRMS fetch and adds a Replay snapshot per run. **Daily only** — Hobby caps crons at one run/day and a finer expression fails deployment, so Replay's 24h window still isn't continuous without a paid plan.
@@ -71,7 +73,7 @@ Auth is explicitly out of scope per product decision — every Phase 1 auth item
 - [x] Geolocation + IP fallback + fly-to, all local panels (weather/AQI/sun-moon/timezone) populate independently
 - [x] Timezone now live (GeoNames) — was the only unverified piece here
 - [x] **UV index + ground elevation** in `WeatherPanel` — UV was already fetched from Open-Meteo and discarded; it now shows with its WHO exposure band, and elevation comes free on the same response.
-- [ ] Nearby airports, re-query on viewport shift — still not started
+- [x] **Nearby airports, re-query on viewport shift** — see Phase 2's OurAirports entry; `AirportsLayer.tsx` re-filters on every `cameraPosition` change
 - [x] Persist active layers + bookmarks + units to local storage
 
 ## Phase 5 — Layers & UI
@@ -125,7 +127,7 @@ See [11-roadmap.md](docs/11-roadmap.md).
 - **MapLibre minimap, 3D buildings/roads/population** — need offline tile-processing pipelines well beyond an in-session change.
 - **i18n, service worker/offline** — not started; i18n in particular is meaningless without real translations.
 - **Lighthouse CI gate / full WCAG AA contrast audit** — need a deployed instance and dedicated tooling runs; targeted a11y fixes have been made instead (focus rings, `aria-live`, reduced-motion, correct landmark roles, colour never the sole channel).
-- **The remaining unbuilt adapters** (NOAA radar, GVP volcanoes, NASA EPIC/APOD/NeoWs, OurAirports, NOAA NDBC/CO-OPS/NHC, Wikidata, Blitzortung, AISHub) — GDACS and NWS alerts are now done; each of the rest needs its own live schema verification, and adding them unverified would violate this project's core rule. Blitzortung and AISHub in particular have no documented free REST API.
+- **The remaining unbuilt adapters** (NOAA radar, NASA EPIC/APOD/NeoWs, NOAA NDBC/CO-OPS/NHC, Wikidata, Blitzortung, AISHub) — GDACS, NWS alerts, GVP volcanoes and OurAirports are now done; each of the rest needs its own live schema verification, and adding them unverified would violate this project's core rule. Blitzortung and AISHub in particular have no documented free REST API.
 
 ## Known open bug
 

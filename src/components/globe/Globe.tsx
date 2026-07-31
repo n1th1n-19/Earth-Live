@@ -54,6 +54,8 @@ import { IssLayer } from "@/components/globe/layers/IssLayer";
 import { DisastersLayer } from "@/components/globe/layers/DisastersLayer";
 import { WeatherAlertsLayer } from "@/components/globe/layers/WeatherAlertsLayer";
 import { PlacesLayer } from "@/components/globe/layers/PlacesLayer";
+import { AirportsLayer } from "@/components/globe/layers/AirportsLayer";
+import { VolcanoesLayer } from "@/components/globe/layers/VolcanoesLayer";
 import { WildfireLayer } from "@/components/globe/layers/WildfireLayer";
 
 // Primary globe engine per docs/03-architecture.md §3.2: CesiumJS, chosen for
@@ -459,6 +461,8 @@ export function Globe({ latitude, longitude }: GlobeProps) {
         {activeLayers.includes("iss") && <IssLayer />}
         {activeLayers.includes("wildfires") && <WildfireLayer />}
         {activeLayers.includes("places") && <PlacesLayer />}
+        {activeLayers.includes("volcanoes") && <VolcanoesLayer />}
+        {activeLayers.includes("airports") && <AirportsLayer />}
         {activeLayers.includes("disasters") && <DisastersLayer />}
         {activeLayers.includes("alerts") && <WeatherAlertsLayer />}
 

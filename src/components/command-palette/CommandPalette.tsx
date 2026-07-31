@@ -18,6 +18,8 @@ const LAYER_LABELS: Record<LayerId, string> = {
   flights: "Flights",
   iss: "ISS",
   places: "Capitals",
+  volcanoes: "Volcanoes",
+  airports: "Nearby airports",
 };
 
 export function CommandPalette() {
