@@ -36,7 +36,6 @@ import {
   Color,
   EllipsoidTerrainProvider,
   Math as CesiumMath,
-  PolylineGlowMaterialProperty,
 } from "cesium";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Entity, GeoJsonDataSource, PointGraphics, PolylineGraphics, Viewer } from "resium";
@@ -44,7 +43,6 @@ import type { Viewer as CesiumViewer } from "cesium";
 import { useUiStore } from "@/lib/store";
 import { totalPathDistanceKm, type LatLon } from "@/lib/geo-math";
 import { formatDistanceKm } from "@/lib/units";
-import { buildGraticulePositions } from "@/lib/graticule";
 import { FloatingControls } from "@/components/globe/FloatingControls";
 import { AuroraLayer } from "@/components/globe/layers/AuroraLayer";
 import { EarthquakeLayer } from "@/components/globe/layers/EarthquakeLayer";
@@ -58,8 +56,7 @@ import { WildfireLayer } from "@/components/globe/layers/WildfireLayer";
 //
 // Wireframe look: a flat black globe with no imagery, real country borders
 // (Natural Earth 1:110m, public domain — public/data/ne_110m_admin_0_countries.geojson,
-// bundled static rather than fetched from GitHub at runtime) and a generated
-// lat/long graticule (src/lib/graticule.ts) as glowing lines. No ion token,
+// bundled static rather than fetched from GitHub at runtime). No ion token,
 // no photoreal imagery/terrain — that whole path (Bing aerial, real terrain
 // relief, GIBS clouds/night-lights) was removed in favor of this; see git
 // history and TODO.md if it's ever wanted back.
@@ -68,11 +65,6 @@ import { WildfireLayer } from "@/components/globe/layers/WildfireLayer";
 // module-level singleton is fine — same flat sphere the wireframe reference
 // image shows, no relief needed.
 const ellipsoidTerrain = new EllipsoidTerrainProvider();
-
-const GRATICULE_MATERIAL = new PolylineGlowMaterialProperty({
-  glowPower: 0.15,
-  color: Color.CYAN.withAlpha(0.4),
-});
 
 interface GlobeProps {
   latitude: number | null;
@@ -120,9 +112,6 @@ export function Globe({ latitude, longitude }: GlobeProps) {
 
   const [measuring, setMeasuring] = useState(false);
   const [measurePoints, setMeasurePoints] = useState<LatLon[]>([]);
-
-  // Real computed lat/long grid lines, not a texture — src/lib/graticule.ts.
-  const graticuleLines = useMemo(() => buildGraticulePositions(), []);
 
   // Real-time day/night terminator (FR-1) — Cesium computes this from actual
   // sun position once lighting is enabled; no custom math needed. Kept even
@@ -355,11 +344,6 @@ export function Globe({ latitude, longitude }: GlobeProps) {
           strokeWidth={1}
           fill={Color.TRANSPARENT}
         />
-        {graticuleLines.map((positions, i) => (
-          <Entity key={i}>
-            <PolylineGraphics positions={positions} width={1} material={GRATICULE_MATERIAL} />
-          </Entity>
-        ))}
         <AuroraLayer />
 
         {activeLayers.includes("earthquakes") && <EarthquakeLayer />}
