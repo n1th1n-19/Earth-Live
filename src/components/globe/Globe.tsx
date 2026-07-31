@@ -340,8 +340,8 @@ export function Globe({ latitude, longitude }: GlobeProps) {
       >
         <GeoJsonDataSource
           data="/data/ne_110m_admin_0_countries.geojson"
-          stroke={Color.CYAN.withAlpha(0.7)}
-          strokeWidth={1}
+          stroke={Color.CYAN}
+          strokeWidth={2}
           fill={Color.TRANSPARENT}
         />
         <AuroraLayer />
