@@ -9,6 +9,9 @@ import { persist } from "zustand/middleware";
 // implemented yet — deliberately not exposed as togglable here.
 export type LayerId = "weather" | "earthquakes" | "flights" | "iss" | "wildfires" | "places";
 
+/** The individually closeable local-conditions cards (top-left of the globe). */
+export type PanelId = "weather" | "airQuality" | "sunMoon";
+
 export interface SelectedEvent {
   kind: "earthquake" | "flight" | "iss" | "satellite" | "wildfire" | "place";
   title: string;
@@ -66,6 +69,13 @@ interface UiState {
   earthRotation: boolean;
   setEarthRotation: (on: boolean) => void;
 
+  // Local-conditions cards the user has closed individually. Persisted, so a
+  // dismissed card stays gone across reloads. Recovery is deliberately the
+  // Weather layer toggle (see toggleLayer) rather than a separate control —
+  // it already governs these three cards.
+  dismissedPanels: PanelId[];
+  dismissPanel: (id: PanelId) => void;
+
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
 
@@ -103,10 +113,13 @@ export const useUiStore = create<UiState>()(
       activeLayers: DEFAULT_LAYERS,
       toggleLayer: (id) => {
         const current = get().activeLayers;
+        const enabling = !current.includes(id);
         set({
-          activeLayers: current.includes(id)
-            ? current.filter((layer) => layer !== id)
-            : [...current, id],
+          activeLayers: enabling ? [...current, id] : current.filter((layer) => layer !== id),
+          // Switching Weather back on is the recovery path for individually
+          // closed local-conditions cards — otherwise closing all three
+          // would leave no way to get them back.
+          ...(id === "weather" && enabling ? { dismissedPanels: [] } : {}),
         });
       },
       setActiveLayers: (layers) => set({ activeLayers: layers }),
@@ -140,6 +153,13 @@ export const useUiStore = create<UiState>()(
 
       earthRotation: true,
       setEarthRotation: (on) => set({ earthRotation: on }),
+
+      dismissedPanels: [],
+      dismissPanel: (id) => {
+        const current = get().dismissedPanels;
+        if (current.includes(id)) return;
+        set({ dismissedPanels: [...current, id] });
+      },
 
       commandPaletteOpen: false,
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
@@ -176,6 +196,7 @@ export const useUiStore = create<UiState>()(
         bookmarks: state.bookmarks,
         units: state.units,
         earthRotation: state.earthRotation,
+        dismissedPanels: state.dismissedPanels,
       }),
     },
   ),

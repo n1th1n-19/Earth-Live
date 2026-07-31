@@ -10,6 +10,7 @@ import { WeatherPanel } from "@/components/panels/WeatherPanel";
 import { AirQualityPanel } from "@/components/panels/AirQualityPanel";
 import { SunMoonPanel } from "@/components/panels/SunMoonPanel";
 import { SpaceWeatherPanel } from "@/components/panels/SpaceWeatherPanel";
+import { DismissiblePanel } from "@/components/panels/DismissiblePanel";
 import { LayerPanel } from "@/components/panels/LayerPanel";
 import { EventDetailPanel } from "@/components/panels/EventDetailPanel";
 import { CoordinateReadout } from "@/components/panels/CoordinateReadout";
@@ -140,9 +141,15 @@ export default function Home() {
       <div className="pointer-events-none absolute left-2 right-2 top-2 z-10 flex gap-3 overflow-x-auto sm:left-4 sm:right-auto sm:top-4 sm:flex-col sm:overflow-visible">
         {activeLayers.includes("weather") && (
           <>
-            <WeatherPanel location={location} />
-            <AirQualityPanel location={location} />
-            <SunMoonPanel location={location} />
+            <DismissiblePanel id="weather" label="weather panel">
+              <WeatherPanel location={location} />
+            </DismissiblePanel>
+            <DismissiblePanel id="airQuality" label="air quality panel">
+              <AirQualityPanel location={location} />
+            </DismissiblePanel>
+            <DismissiblePanel id="sunMoon" label="sun and moon panel">
+              <SunMoonPanel location={location} />
+            </DismissiblePanel>
           </>
         )}
       </div>

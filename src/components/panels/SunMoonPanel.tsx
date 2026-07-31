@@ -24,7 +24,9 @@ export function SunMoonPanel({ location }: { location: UserLocation }) {
 
   return (
     <div className="pointer-events-auto w-72 rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-neutral-100 backdrop-blur-xl shadow-2xl">
-      <div className="flex items-center justify-between font-mono text-xs">
+      {/* pr-6 keeps the moon-illumination figure clear of the overlaid close
+          button (see DismissiblePanel). */}
+      <div className="flex items-center justify-between pr-6 font-mono text-xs">
         <div className="flex items-center gap-1.5 text-amber-300">
           <Sunrise size={14} />
           {data ? formatTime(data.sunrise) : "—"}

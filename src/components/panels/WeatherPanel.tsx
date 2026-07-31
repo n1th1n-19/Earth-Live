@@ -27,7 +27,9 @@ export function WeatherPanel({ location }: { location: UserLocation }) {
       aria-live="polite"
       className="pointer-events-auto w-72 rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-neutral-100 backdrop-blur-xl shadow-2xl"
     >
-      <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-neutral-400">
+      {/* pr-6 keeps the location/timezone line clear of the overlaid close
+          button (see DismissiblePanel). */}
+      <div className="flex items-center gap-2 pr-6 text-xs uppercase tracking-wide text-neutral-400">
         <MapPin size={14} />
         <span>
           {location.source === "gps"
