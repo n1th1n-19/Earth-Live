@@ -192,8 +192,12 @@ export default function Home() {
         <SpaceWeatherPanel />
       </div>
 
-      {/* Event detail — right side on desktop, full-width sheet on mobile */}
-      <div className="pointer-events-none absolute inset-x-4 bottom-20 z-10 flex justify-end sm:inset-x-auto sm:right-4">
+      {/* Event detail popup. Offset to `right-20` on desktop so it clears
+          the floating control column (bottom-4 right-4) instead of sitting
+          on top of it; on mobile it's a bottom sheet raised above the same
+          controls. It overlays the globe only — never the other panels —
+          and is absolutely positioned, so showing it never reflows them. */}
+      <div className="pointer-events-none absolute inset-x-4 bottom-24 z-30 flex justify-center sm:inset-x-auto sm:bottom-4 sm:right-20 sm:justify-end">
         <EventDetailPanel />
       </div>
     </div>

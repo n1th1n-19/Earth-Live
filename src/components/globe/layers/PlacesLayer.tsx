@@ -21,13 +21,14 @@ const LABEL_DISTANCE = new DistanceDisplayCondition(0, 4_000_000);
 interface Capital {
   name: string;
   country: string;
+  population: number | null;
   longitude: number;
   latitude: number;
 }
 
 interface CapitalFeature {
   geometry: { coordinates: [number, number] };
-  properties: { name: string; country: string };
+  properties: { name: string; country: string; population?: number | null };
 }
 
 export function PlacesLayer() {
@@ -44,6 +45,7 @@ export function PlacesLayer() {
           geojson.features.map((f) => ({
             name: f.properties.name,
             country: f.properties.country,
+            population: f.properties.population ?? null,
             longitude: f.geometry.coordinates[0],
             latitude: f.geometry.coordinates[1],
           })),
@@ -63,11 +65,19 @@ export function PlacesLayer() {
           key={`${capital.name}-${capital.country}`}
           position={Cartesian3.fromDegrees(capital.longitude, capital.latitude)}
           name={capital.name}
+          description={capital.country}
           onClick={() =>
             setSelectedEvent({
               kind: "place",
               title: capital.name,
-              attributes: [{ label: "Country", value: capital.country }],
+              placeName: capital.name,
+              country: capital.country,
+              attributes: [
+                { label: "Country", value: capital.country },
+                ...(capital.population != null
+                  ? [{ label: "Population", value: capital.population.toLocaleString() }]
+                  : []),
+              ],
               latitude: capital.latitude,
               longitude: capital.longitude,
             })
