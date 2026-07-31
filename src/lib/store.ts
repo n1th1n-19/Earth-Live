@@ -16,6 +16,15 @@ export interface SelectedEvent {
   sourceUrl?: string;
   latitude: number;
   longitude: number;
+  /**
+   * Real ICAO callsign, flights only. Kept separate from `title` because
+   * that falls back to the icao24 hex id when a flight is broadcasting no
+   * callsign — feeding that fallback to adsbdb would be a guaranteed miss.
+   */
+  callsign?: string;
+  /** Capital-city places only — used to look up the place's own detail. */
+  placeName?: string;
+  country?: string;
 }
 
 export interface Bookmark {
@@ -51,6 +60,11 @@ interface UiState {
   // heatmap of the same live/replay data — a view toggle, not a data layer.
   earthquakeHeatmap: boolean;
   setEarthquakeHeatmap: (on: boolean) => void;
+
+  // Drifts the camera westward at the Earth's true sidereal rate (~15°/hr)
+  // so the globe tracks real rotation. A display preference, so persisted.
+  earthRotation: boolean;
+  setEarthRotation: (on: boolean) => void;
 
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
@@ -124,6 +138,9 @@ export const useUiStore = create<UiState>()(
       earthquakeHeatmap: false,
       setEarthquakeHeatmap: (on) => set({ earthquakeHeatmap: on }),
 
+      earthRotation: true,
+      setEarthRotation: (on) => set({ earthRotation: on }),
+
       commandPaletteOpen: false,
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
 
@@ -158,6 +175,7 @@ export const useUiStore = create<UiState>()(
         activeLayers: state.activeLayers,
         bookmarks: state.bookmarks,
         units: state.units,
+        earthRotation: state.earthRotation,
       }),
     },
   ),

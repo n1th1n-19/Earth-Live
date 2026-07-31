@@ -1,10 +1,9 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { ArcType, Cartesian3, Color, HeadingPitchRoll, Math as CesiumMath, PolylineGlowMaterialProperty, Transforms } from "cesium";
-import { CustomDataSource, Entity, ModelGraphics, PolylineGraphics } from "resium";
+import { Entity, ModelGraphics, PolylineGraphics } from "resium";
 import { useFlights } from "@/lib/use-flights";
-import { useEntityClustering } from "@/lib/use-entity-clustering";
 import { useUiStore } from "@/lib/store";
 import { formatSpeedKmh } from "@/lib/units";
 import { useFlightRoute } from "@/lib/use-flight-route";
@@ -14,16 +13,22 @@ import type { Flight } from "@/lib/adapters/opensky";
 // Pizza, "Poly by Google", CC-BY 3.0 — credited in CreditsPanel.tsx).
 const AIRPLANE_MODEL_URI = "/models/airplane.glb";
 
-// Capped to MAX_FLIGHTS (src/lib/adapters/opensky.ts). Clustering (via
-// useEntityClustering) keeps dense airspace legible.
+// Capped to MAX_FLIGHTS (src/lib/adapters/opensky.ts).
 const TRAIL_LENGTH = 6;
+
+// Clustering used to collapse nearby aircraft into a numeric badge, which
+// meant zooming out replaced every plane with an unexplained number. Dropped
+// in favour of a screen-space floor: minimumPixelSize keeps each aircraft a
+// legible icon at any camera distance, maximumScale stops it ballooning when
+// the camera is right on top of it.
+const MIN_PIXEL_SIZE = 32;
+const MAX_MODEL_SCALE = 12_000;
 
 type LatLon = { latitude: number; longitude: number };
 
 export function FlightsLayer() {
   const { data } = useFlights();
   const setSelectedEvent = useUiStore((s) => s.setSelectedEvent);
-  const clustering = useEntityClustering();
 
   // Real per-aircraft position history accumulated client-side across polls
   // — OpenSky's free anonymous tier doesn't expose historical tracks, so a
@@ -54,13 +59,14 @@ export function FlightsLayer() {
     setTrails(next);
   }
 
-  if (!data) return null;
-
+  // SelectedFlightRoute sits outside the `data` guard: the route line is
+  // driven purely by the current selection, so it must survive a poll that
+  // momentarily returns no flights (or a slow first load) rather than
+  // blinking out with the aircraft list.
   return (
     <>
       <SelectedFlightRoute />
-      <CustomDataSource clustering={clustering}>
-      {data.map((flight) => {
+      {data?.map((flight) => {
         const trail = trails.get(flight.icao24);
         return (
           <Fragment key={flight.icao24}>
@@ -100,14 +106,18 @@ export function FlightsLayer() {
                   name={flight.callsign ?? flight.icao24}
                   onClick={() => setSelectedEvent(toSelectedEvent(flight))}
                 >
-                  <ModelGraphics uri={AIRPLANE_MODEL_URI} minimumPixelSize={24} scale={1} />
+                  <ModelGraphics
+                    uri={AIRPLANE_MODEL_URI}
+                    minimumPixelSize={MIN_PIXEL_SIZE}
+                    maximumScale={MAX_MODEL_SCALE}
+                    scale={1}
+                  />
                 </Entity>
               );
             })()}
           </Fragment>
         );
       })}
-      </CustomDataSource>
     </>
   );
 }
@@ -119,24 +129,36 @@ export function FlightsLayer() {
 // routes) draw nothing — no synthesized fallback line.
 function SelectedFlightRoute() {
   const selectedEvent = useUiStore((s) => s.selectedEvent);
-  const callsign = selectedEvent?.kind === "flight" ? selectedEvent.title : null;
+  // The real broadcast callsign, never `title` — that falls back to the
+  // icao24 hex id, which adsbdb can never resolve.
+  const callsign = selectedEvent?.kind === "flight" ? (selectedEvent.callsign ?? null) : null;
   const { data: route } = useFlightRoute(callsign);
 
-  if (!route) return null;
+  // Cesium treats a new Cartesian3[]/material instance as a changed property
+  // and rebuilds the polyline primitive, so these are keyed on the actual
+  // coordinates rather than recreated on every parent re-render.
+  const positions = useMemo(
+    () =>
+      route
+        ? Cartesian3.fromDegreesArray([
+            route.origin.longitude,
+            route.origin.latitude,
+            route.destination.longitude,
+            route.destination.latitude,
+          ])
+        : undefined,
+    [route],
+  );
+  const material = useMemo(
+    () => new PolylineGlowMaterialProperty({ color: Color.CYAN.withAlpha(0.8), glowPower: 0.2 }),
+    [],
+  );
+
+  if (!route || !positions) return null;
 
   return (
     <Entity name={`${route.origin.name} → ${route.destination.name}`}>
-      <PolylineGraphics
-        positions={Cartesian3.fromDegreesArray([
-          route.origin.longitude,
-          route.origin.latitude,
-          route.destination.longitude,
-          route.destination.latitude,
-        ])}
-        width={2}
-        arcType={ArcType.GEODESIC}
-        material={new PolylineGlowMaterialProperty({ color: Color.CYAN.withAlpha(0.8), glowPower: 0.2 })}
-      />
+      <PolylineGraphics positions={positions} width={3} arcType={ArcType.GEODESIC} material={material} />
     </Entity>
   );
 }
@@ -153,6 +175,7 @@ function toSelectedEvent(flight: Flight) {
   return {
     kind: "flight" as const,
     title: flight.callsign ?? flight.icao24,
+    callsign: flight.callsign ?? undefined,
     attributes: [
       { label: "Origin country", value: flight.originCountry },
       { label: "Altitude", value: altitudeLabel },
