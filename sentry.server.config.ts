@@ -1,22 +1,26 @@
-// This file configures the initialization of Sentry on the server.
-// The config you add here will be used whenever the server handles a request.
-// https://docs.sentry.io/platforms/javascript/guides/nextjs/
-
+// Server-side error reporting. Points at GlitchTip (MIT-licensed, free
+// hosted tier), which implements Sentry's ingest protocol — the
+// @sentry/nextjs SDK is unchanged, only the DSN differs.
+//
+// Server-only env var (no NEXT_PUBLIC_ prefix) so the DSN isn't inlined into
+// the client bundle. Unset means error reporting is off entirely.
 import * as Sentry from "@sentry/nextjs";
 
-Sentry.init({
-  dsn: "https://392298ed5c8bbfaeee8876d43fce311e@o4511796896923648.ingest.de.sentry.io/4511796900724816",
+const dsn = process.env.GLITCHTIP_DSN;
 
-  // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-  tracesSampleRate: 1,
+if (dsn) {
+  Sentry.init({
+    dsn,
 
-  // Enable logs to be sent to Sentry
-  enableLogs: true,
+    // Sampled low to stay inside GlitchTip's free 1,000 events/month —
+    // see the note in src/instrumentation-client.ts.
+    tracesSampleRate: 0.05,
 
-  dataCollection: {
-    // To disable sending user data and HTTP bodies, uncomment the lines below. For more info visit:
-    // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#dataCollection
-    // userInfo: false,
-    // httpBodies: [],
-  },
-});
+    dataCollection: {
+      // To disable sending user data and HTTP bodies, uncomment the lines below. For more info visit:
+      // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#dataCollection
+      // userInfo: false,
+      // httpBodies: [],
+    },
+  });
+}

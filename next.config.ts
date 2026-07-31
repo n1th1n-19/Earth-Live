@@ -45,16 +45,25 @@ import type { NextConfig } from "next";
 // or Cesium dropping its `jsep`-based eval path. Re-check on each Next.js
 // and Cesium major upgrade.
 //
-// No third-party origin is allowlisted at all. Place summaries and climate
-// normals are fetched server-side through this app's own /api/place-info
-// route, so they need no client-side entry either.
+// Third-party origins are limited to Cloudflare Web Analytics
+// (src/components/Analytics.tsx): `static.cloudflareinsights.com` serves the
+// beacon script and `cloudflareinsights.com` receives the measurements via
+// navigator.sendBeacon. Both entries are inert unless
+// NEXT_PUBLIC_CF_BEACON_TOKEN is configured, since nothing loads the beacon
+// otherwise — but the CSP must list them or the browser blocks it silently.
+//
+// Error reporting needs no entry here: `tunnelRoute` below routes it through
+// this app's own /monitoring path, same-origin.
+//
+// Place summaries and climate normals are fetched server-side through this
+// app's own /api/place-info route, so they need no client-side entry either.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  "connect-src 'self' https://cloudflareinsights.com",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
@@ -187,37 +196,33 @@ const nextConfig: NextConfig = {
   },
 };
 
+// The @sentry/nextjs SDK is kept, but it reports to GlitchTip (see
+// sentry.*.config.ts) — so every sentry.io-specific build step is switched
+// off here:
+//
+//  - `org`/`project` and source-map upload target Sentry's own SaaS upload
+//    API, which GlitchTip does not implement. Leaving them on would fail (or
+//    silently no-op) every build and needs a SENTRY_AUTH_TOKEN this project
+//    no longer has. Stack traces stay readable because Next emits source maps
+//    that the browser resolves locally.
+//  - `automaticVercelMonitors` instruments Sentry Crons, another product
+//    GlitchTip doesn't ingest.
+//
+// `tunnelRoute` is kept: it proxies error reports through this app's own
+// /monitoring path, which both dodges ad-blockers and keeps the reporting
+// endpoint same-origin so the CSP needs no entry for it.
 export default withSentryConfig(nextConfig, {
-  // For all available options, see:
-  // https://www.npmjs.com/package/@sentry/webpack-plugin#options
-
-  org: "earth-live",
-
-  project: "javascript-nextjs",
-
-  // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
 
-  // For all available options, see:
-  // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
+  sourcemaps: {
+    disable: true,
+  },
 
-  // Upload a larger set of source maps for prettier stack traces (increases build time)
-  widenClientFileUpload: true,
-
-  // Route browser requests to Sentry through a Next.js rewrite to circumvent ad-blockers.
-  // This can increase your server load as well as your hosting bill.
-  // Note: Check that the configured route will not match with your Next.js middleware, otherwise reporting of client-
-  // side errors will fail.
   tunnelRoute: "/monitoring",
 
   webpack: {
-    // Enables automatic instrumentation of Vercel Cron Monitors. (Does not yet work with App Router route handlers.)
-    // See the following for more information:
-    // https://docs.sentry.io/product/crons/
-    // https://vercel.com/docs/cron-jobs
-    automaticVercelMonitors: true,
+    automaticVercelMonitors: false,
 
-    // Tree-shaking options for reducing bundle size
     treeshake: {
       // Automatically tree-shake Sentry logger statements to reduce bundle size
       removeDebugLogging: true,
