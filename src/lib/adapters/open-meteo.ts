@@ -13,6 +13,9 @@ const openMeteoResponseSchema = z.object({
   latitude: z.number(),
   longitude: z.number(),
   timezone: z.string(),
+  // Ground elevation of the model grid cell, metres. Open-Meteo returns this
+  // on every forecast response, so it needs no extra request.
+  elevation: z.number().nullable().optional(),
   current: z.object({
     time: z.string(),
     temperature_2m: z.number(),
@@ -43,6 +46,8 @@ export interface CurrentWeather {
   windDirectionDeg: number;
   cloudCoverPercent: number;
   uvIndex: number | null;
+  /** Ground elevation at this location, metres. */
+  elevationM: number | null;
 }
 
 function roundCoord(value: number): number {
@@ -133,5 +138,6 @@ function normalize(data: OpenMeteoCurrent): CurrentWeather {
     windDirectionDeg: data.current.wind_direction_10m,
     cloudCoverPercent: data.current.cloud_cover,
     uvIndex: data.current.uv_index ?? null,
+    elevationM: data.elevation ?? null,
   };
 }

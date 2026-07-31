@@ -1,11 +1,22 @@
 "use client";
 
-import { Loader2, MapPin, Wind, Droplets, Cloud } from "lucide-react";
+import { Loader2, MapPin, Mountain, Sun, Wind, Droplets, Cloud } from "lucide-react";
 import type { UserLocation } from "@/lib/geolocation";
 import { useWeather } from "@/lib/use-weather";
 import { useTimezone } from "@/lib/use-timezone";
 import { useUiStore } from "@/lib/store";
-import { formatTemperature, formatSpeedKmh } from "@/lib/units";
+import { formatTemperature, formatSpeedKmh, formatElevationM } from "@/lib/units";
+
+// WHO/WMO ultraviolet index exposure categories. Colour alone never carries
+// the meaning — the band name is rendered alongside it (docs/04-ui-ux-spec.md
+// §4.5, "color is never the sole channel").
+function uvBand(uv: number): { label: string; className: string } {
+  if (uv < 3) return { label: "Low", className: "text-emerald-400" };
+  if (uv < 6) return { label: "Moderate", className: "text-yellow-400" };
+  if (uv < 8) return { label: "High", className: "text-orange-400" };
+  if (uv < 11) return { label: "Very high", className: "text-red-400" };
+  return { label: "Extreme", className: "text-fuchsia-400" };
+}
 
 // Glass panel per docs/04-ui-ux-spec.md §4.2/§4.4 — floating over the globe,
 // never blocking it, progressive population per FR-7 (this panel doesn't
@@ -77,7 +88,26 @@ export function WeatherPanel({ location }: { location: UserLocation }) {
             <div className="flex items-center gap-1">
               <Cloud size={12} /> {Math.round(data.cloudCoverPercent)}%
             </div>
+            {/* UV was already being fetched but never shown. Colour-coded to
+                the WHO exposure bands, and paired with the band name so the
+                number isn't the only channel carrying the meaning. */}
+            {data.uvIndex != null && (
+              <div className="flex items-center gap-1" title={`UV index ${data.uvIndex.toFixed(1)}`}>
+                <Sun size={12} className={uvBand(data.uvIndex).className} />
+                UV {Math.round(data.uvIndex)}
+              </div>
+            )}
+            {data.elevationM != null && (
+              <div className="flex items-center gap-1" title="Ground elevation">
+                <Mountain size={12} /> {formatElevationM(data.elevationM, units)}
+              </div>
+            )}
           </div>
+          {data.uvIndex != null && (
+            <div className={`font-mono text-[10px] ${uvBand(data.uvIndex).className}`}>
+              UV {uvBand(data.uvIndex).label}
+            </div>
+          )}
           <div className="pt-2 text-[10px] text-neutral-500">
             Weather data by Open-Meteo.com · updated{" "}
             {new Date(data.observedAt).toLocaleTimeString()}
