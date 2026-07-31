@@ -39,7 +39,7 @@ Auth is explicitly out of scope per product decision — every Phase 1 auth item
   - [x] **NASA DONKI (space weather events)** → expandable list in `SpaceWeatherPanel`
 - Not started (unchanged from before, still real gaps):
   - [x] **adsbdb.com (flight routes)** → `FlightsLayer` — lazy, per-selection callsign→route lookup; draws a real great-circle line when resolvable, no fallback otherwise
-  - [ ] Open-Meteo elevation, NWS alerts, NOAA radar, Smithsonian GVP volcanoes, GDACS, NASA EPIC/APOD/NeoWs, OurAirports, NOAA NDBC/CO-OPS/NHC, Wikidata, Blitzortung lightning, AISHub ships
+  - [ ] NWS alerts, NOAA radar, Smithsonian GVP volcanoes, GDACS, NASA EPIC/APOD/NeoWs, OurAirports, NOAA NDBC/CO-OPS/NHC, Wikidata, Blitzortung lightning, AISHub ships
 - [ ] SSE endpoints for ISS + flights fan-out *(still client polling — fine at current scale)*
 - [x] Redis-backed rate limiter — `/api/geocode`
 - [x] **Scheduled cron** — `vercel.ts` `crons` + `/api/cron/prewarm`, CRON_SECRET-authenticated. The "needs an interactive `vercel link`" note was wrong: crons are declared in project config and ship with a deploy. Pre-warms the ~90s FIRMS fetch and adds a Replay snapshot per run. **Daily only** — Hobby caps crons at one run/day and a finer expression fails deployment, so Replay's 24h window still isn't continuous without a paid plan.
@@ -59,7 +59,9 @@ Auth is explicitly out of scope per product decision — every Phase 1 auth item
 - [x] **Earthquake heatmap mode** — toggle in the layer panel; canvas-generated additive-blob density map (not a real KDE), same "approximation, disclosed" spirit as the FIRMS caveat
 - [x] **Flight trails** — short fading polyline per aircraft, built from real positions accumulated client-side across polls (OpenSky's free tier has no historical track endpoint)
 - [x] **Aurora oval** — approximate geomagnetic-pole ellipses, always on, sized/gated by the real live Kp index (`/api/space-weather`) — not the real OVATION model, disclosed as such
-- [x] Cinematic space-to-target intro flyby
+- [x] ~~Cinematic space-to-target intro flyby~~ — **removed**: granting location permission used to fly the camera down to 1,500km, yanking the viewer out of the whole-globe view. Resolving a location now only re-centres and drops a marker; the explicit "Recenter" control still zooms in.
+- [x] **Real-time Earth rotation** — camera drifts westward at one turn per sidereal day (86,164s, the true rotation period against the stars), pausing during user interaction.
+- [x] **Hover readout + place details** — hovering any entity shows its name/detail from the entity itself; selecting a capital loads a Wikipedia summary plus ERA5 climate averages.
 - [ ] MapLibre minimap, 3D buildings/roads/population — **still not started**, these need offline tile-processing pipelines outside a single session's scope
 
 ## Phase 4 — Location & personalization
