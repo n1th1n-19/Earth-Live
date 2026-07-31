@@ -7,7 +7,9 @@ import { Info, X } from "lucide-react";
 // source whose terms require credit (docs/05-api-integration-guide.md
 // per-source "Attribution" field) — individual panels also credit their
 // own source inline, this is the single place that lists all of them.
-const SOURCES: { name: string; note: string }[] = [
+// CC BY requires the licensee to name the author, the work, the licence, and
+// link back — so those rows carry `url`/`license` rather than a bare note.
+const SOURCES: { name: string; note: string; url?: string; license?: string }[] = [
   { name: "Open-Meteo.com", note: "Weather (CC BY 4.0)" },
   { name: "USGS Earthquake Hazards Program", note: "Earthquakes (public domain)" },
   { name: "NASA FIRMS", note: "Active fire detections" },
@@ -20,8 +22,24 @@ const SOURCES: { name: string; note: string }[] = [
   { name: "OpenAQ", note: "Air quality station data (CC BY 4.0)" },
   { name: "GeoNames", note: "Timezone lookup (CC BY 4.0)" },
   { name: "Natural Earth", note: "Country borders + capital cities (public domain, 1:110m)" },
-  { name: "Poly by Google (via Poly Pizza)", note: "Airplane 3D model (CC BY 3.0)" },
-  { name: "Kenney (kenney.nl)", note: "Satellite 3D model (CC0)" },
+  {
+    name: "“Airplane” by Poly by Google",
+    note: "Aircraft 3D model, via Poly Pizza — used unmodified",
+    url: "https://poly.pizza/m/4754ce4b-40ec-4089-8be4-98ce7230bfe4",
+    license: "CC BY 3.0",
+  },
+  {
+    name: "“Satellite Dish” by Kenney",
+    note: "Satellite 3D model, from the Kenney Space Kit — used unmodified",
+    url: "https://kenney.nl/assets/space-kit",
+    license: "CC0 1.0",
+  },
+  {
+    name: "Wikipedia",
+    note: "Place summaries",
+    url: "https://en.wikipedia.org",
+    license: "CC BY-SA 4.0",
+  },
 ];
 
 export function CreditsPanel() {
@@ -47,9 +65,23 @@ export function CreditsPanel() {
           </div>
           <div className="max-h-72 space-y-1.5 overflow-y-auto text-xs">
             {SOURCES.map((s) => (
-              <div key={s.name} className="flex justify-between gap-2 border-b border-white/5 pb-1.5 last:border-0">
-                <span className="text-neutral-200">{s.name}</span>
-                <span className="text-right text-neutral-500">{s.note}</span>
+              <div key={s.name} className="border-b border-white/5 pb-1.5 last:border-0">
+                <div className="flex justify-between gap-2">
+                  {s.url ? (
+                    <a
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-neutral-200 underline decoration-white/20 underline-offset-2 hover:decoration-white/60"
+                    >
+                      {s.name}
+                    </a>
+                  ) : (
+                    <span className="text-neutral-200">{s.name}</span>
+                  )}
+                  <span className="text-right text-neutral-500">{s.note}</span>
+                </div>
+                {s.license && <div className="text-[10px] text-neutral-600">{s.license}</div>}
               </div>
             ))}
           </div>

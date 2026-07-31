@@ -35,3 +35,11 @@ jobs:
       # required here either.
       - name: Build
         run: npm run build
+
+      # A green build is NOT proof the bundle is usable here: Next's
+      # production minifier silently corrupts the Cesium/@spz-loader chunks
+      # (worked around by SkipMinifyForWasmEmbeds in next.config.ts), and the
+      # only symptom is a globe stuck forever on "Loading globe…" at runtime.
+      # This parses every emitted chunk so that regression fails CI instead.
+      - name: Chunk integrity (minifier-corruption regression)
+        run: npm run check:chunks

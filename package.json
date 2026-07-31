@@ -10,6 +10,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "check:chunks": "node scripts/check-chunk-integrity.mjs",
     "postinstall": "node scripts/copy-cesium-assets.mjs && prisma generate"
   },
   "dependencies": {
