@@ -39,7 +39,9 @@ Auth is explicitly out of scope per product decision — every Phase 1 auth item
   - [x] **NASA DONKI (space weather events)** → expandable list in `SpaceWeatherPanel`
 - Not started (unchanged from before, still real gaps):
   - [x] **adsbdb.com (flight routes)** → `FlightsLayer` — lazy, per-selection callsign→route lookup; draws a real great-circle line when resolvable, no fallback otherwise
-  - [ ] NWS alerts, NOAA radar, Smithsonian GVP volcanoes, GDACS, NASA EPIC/APOD/NeoWs, OurAirports, NOAA NDBC/CO-OPS/NHC, Wikidata, Blitzortung lightning, AISHub ships
+  - [x] **GDACS (global disaster alerts)** → `DisastersLayer` — free/keyless, Orange+Red humanitarian-impact tiers only. ~100 active events across floods, wildfires, droughts, quakes, cyclones and volcanoes. Features are parsed individually so one malformed record can't blank the layer.
+  - [x] **NOAA/NWS severe weather alerts** → `WeatherAlertsLayer` — real warning polygons, Extreme+Severe only. **Partial by design**: most active alerts carry `geometry: null` and reference zones instead (51 of 62 measured live), so only polygon-bearing alerts are drawn and the layer is labelled "US severe (mapped)".
+  - [ ] NOAA radar, Smithsonian GVP volcanoes, NASA EPIC/APOD/NeoWs, OurAirports, NOAA NDBC/CO-OPS/NHC, Wikidata, Blitzortung lightning, AISHub ships — each still needs its own live schema verification
 - [ ] SSE endpoints for ISS + flights fan-out *(still client polling — fine at current scale)*
 - [x] Redis-backed rate limiter — `/api/geocode`
 - [x] **Scheduled cron** — `vercel.ts` `crons` + `/api/cron/prewarm`, CRON_SECRET-authenticated. The "needs an interactive `vercel link`" note was wrong: crons are declared in project config and ship with a deploy. Pre-warms the ~90s FIRMS fetch and adds a Replay snapshot per run. **Daily only** — Hobby caps crons at one run/day and a finer expression fails deployment, so Replay's 24h window still isn't continuous without a paid plan.
@@ -123,7 +125,7 @@ See [11-roadmap.md](docs/11-roadmap.md).
 - **MapLibre minimap, 3D buildings/roads/population** — need offline tile-processing pipelines well beyond an in-session change.
 - **i18n, service worker/offline** — not started; i18n in particular is meaningless without real translations.
 - **Lighthouse CI gate / full WCAG AA contrast audit** — need a deployed instance and dedicated tooling runs; targeted a11y fixes have been made instead (focus rings, `aria-live`, reduced-motion, correct landmark roles, colour never the sole channel).
-- **The long tail of unbuilt adapters** (NWS alerts, NOAA radar, GVP volcanoes, GDACS, NASA EPIC/APOD/NeoWs, OurAirports, NOAA NDBC/CO-OPS/NHC, Wikidata, Blitzortung, AISHub) — each needs its own live schema verification; adding them unverified would violate this project's core rule.
+- **The remaining unbuilt adapters** (NOAA radar, GVP volcanoes, NASA EPIC/APOD/NeoWs, OurAirports, NOAA NDBC/CO-OPS/NHC, Wikidata, Blitzortung, AISHub) — GDACS and NWS alerts are now done; each of the rest needs its own live schema verification, and adding them unverified would violate this project's core rule. Blitzortung and AISHub in particular have no documented free REST API.
 
 ## Known open bug
 
