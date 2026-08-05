@@ -55,6 +55,7 @@ interface FrameState {
   iss: ReturnType<typeof issLayer.useIssData>;
   flights: flightsLayer.FlightsState;
   flightRoute: ReturnType<typeof flightsLayer.useSelectedFlightRoute>;
+  visibleFlightRoutes: ReturnType<typeof flightsLayer.useVisibleFlightRoutes>;
 }
 
 export function Globe2D({ latitude, longitude }: Globe2DProps) {
@@ -94,6 +95,7 @@ export function Globe2D({ latitude, longitude }: Globe2DProps) {
   const issData = issLayer.useIssData();
   const flightsState = flightsLayer.useFlightsData();
   const flightRoute = flightsLayer.useSelectedFlightRoute();
+  const visibleFlightRoutes = flightsLayer.useVisibleFlightRoutes(flightsState.flights);
 
   const stateRef = useRef<FrameState>({
     activeLayers,
@@ -114,6 +116,7 @@ export function Globe2D({ latitude, longitude }: Globe2DProps) {
     iss: null,
     flights: { flights: undefined, trails: new Map() },
     flightRoute: undefined,
+    visibleFlightRoutes: new Map(),
   });
   const renderRef = useRef<() => void>(() => {});
   const animateToRef = useRef<(lng: number, lat: number, scale: number, durationMs?: number) => void>(() => {});
@@ -146,6 +149,7 @@ export function Globe2D({ latitude, longitude }: Globe2DProps) {
       iss: issData,
       flights: flightsState,
       flightRoute,
+      visibleFlightRoutes,
     };
   });
 
@@ -267,7 +271,9 @@ export function Globe2D({ latitude, longitude }: Globe2DProps) {
       }
       if (state.activeLayers.includes("wildfires")) wildfires.draw(args, state.wildfires);
       if (state.activeLayers.includes("iss")) issLayer.draw(args, state.iss);
-      if (state.activeLayers.includes("flights")) flightsLayer.draw(args, state.flights, state.flightRoute ?? undefined);
+      if (state.activeLayers.includes("flights")) {
+        flightsLayer.draw(args, state.flights, state.visibleFlightRoutes, state.flightRoute ?? undefined);
+      }
 
       // Drawn last so it dims everything on the night side uniformly
       // (land, borders, markers) — a black fill layered under bright content

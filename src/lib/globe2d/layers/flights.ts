@@ -1,16 +1,25 @@
 "use client";
 
 import { useState } from "react";
+import { useQueries } from "@tanstack/react-query";
 import { geoInterpolate } from "d3";
 import { useFlights } from "@/lib/use-flights";
-import { useFlightRoute } from "@/lib/use-flight-route";
+import { useFlightRoute, flightRouteQueryOptions } from "@/lib/use-flight-route";
 import { useUiStore } from "@/lib/store";
 import { formatSpeedKmh } from "@/lib/units";
 import { icons } from "@/lib/globe2d/icons";
 import type { DrawArgs, HitCandidate } from "@/lib/globe2d/types";
 import type { Flight } from "@/lib/adapters/opensky";
+import type { FlightRoute } from "@/lib/adapters/adsbdb";
 
 const TRAIL_LENGTH = 6;
+
+// Route lookups hit adsbdb.com (free, keyless, no bulk endpoint) — fetching
+// this for every tracked flight (up to 400) would burst hundreds of
+// simultaneous upstream requests on a cold cache. Capped to a reasonable
+// on-screen count; adsbdb's own 24h server-side cache (see adsbdb.ts) makes
+// every poll after the first one nearly free regardless of this cap.
+const MAX_ROUTE_FETCHES = 40;
 
 type LatLon = { latitude: number; longitude: number };
 
@@ -48,6 +57,27 @@ export function useSelectedFlightRoute() {
   const selectedEvent = useUiStore((s) => s.selectedEvent);
   const callsign = selectedEvent?.kind === "flight" ? (selectedEvent.callsign ?? null) : null;
   return useFlightRoute(callsign).data;
+}
+
+// Route lines for every visible flight, not just the selected one — capped
+// at MAX_ROUTE_FETCHES (see above). Keyed by callsign so draw() can look up
+// a given flight's route without re-deriving the cap subset.
+export function useVisibleFlightRoutes(flights: Flight[] | undefined): Map<string, FlightRoute> {
+  const callsigns = (flights ?? [])
+    .map((f) => f.callsign)
+    .filter((c): c is string => !!c)
+    .slice(0, MAX_ROUTE_FETCHES);
+
+  const results = useQueries({
+    queries: callsigns.map((callsign) => flightRouteQueryOptions(callsign)),
+  });
+
+  const routes = new Map<string, FlightRoute>();
+  callsigns.forEach((callsign, i) => {
+    const route = results[i]?.data;
+    if (route) routes.set(callsign, route);
+  });
+  return routes;
 }
 
 function toSelectedEvent(flight: Flight) {
@@ -96,20 +126,33 @@ function screenHeadingRad(args: DrawArgs, lng: number, lat: number, headingDeg: 
   return Math.atan2(p1[0] - p0[0], -(p1[1] - p0[1]));
 }
 
-export function draw(args: DrawArgs, state: FlightsState, route: { origin: LatLon; destination: LatLon } | undefined) {
+function drawRouteLine(args: DrawArgs, route: { origin: LatLon; destination: LatLon }, color: string, width: number) {
+  const { ctx, path, scaleFactor } = args;
+  const interpolate = geoInterpolate(
+    [route.origin.longitude, route.origin.latitude],
+    [route.destination.longitude, route.destination.latitude],
+  );
+  const line: [number, number][] = Array.from({ length: 65 }, (_, i) => interpolate(i / 64));
+  ctx.beginPath();
+  path({ type: "LineString", coordinates: line });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width * scaleFactor;
+  ctx.stroke();
+}
+
+export function draw(
+  args: DrawArgs,
+  state: FlightsState,
+  visibleRoutes: Map<string, FlightRoute>,
+  selectedRoute: { origin: LatLon; destination: LatLon } | undefined,
+) {
   const { ctx, path, projection, scaleFactor } = args;
 
-  if (route) {
-    const interpolate = geoInterpolate(
-      [route.origin.longitude, route.origin.latitude],
-      [route.destination.longitude, route.destination.latitude],
-    );
-    const line: [number, number][] = Array.from({ length: 65 }, (_, i) => interpolate(i / 64));
-    ctx.beginPath();
-    path({ type: "LineString", coordinates: line });
-    ctx.strokeStyle = "rgba(0,255,255,0.8)";
-    ctx.lineWidth = 2 * scaleFactor;
-    ctx.stroke();
+  for (const route of visibleRoutes.values()) {
+    drawRouteLine(args, route, "rgba(0,255,255,0.35)", 1.5);
+  }
+  if (selectedRoute) {
+    drawRouteLine(args, selectedRoute, "rgba(0,255,255,0.8)", 2);
   }
 
   if (!state.flights) return;
