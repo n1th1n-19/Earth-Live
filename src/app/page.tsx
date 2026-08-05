@@ -23,10 +23,9 @@ import { ShareButton } from "@/components/panels/ShareButton";
 import { ReplayControls } from "@/components/panels/ReplayControls";
 import { CommandPalette } from "@/components/command-palette/CommandPalette";
 
-// Cesium touches `window` at module-eval time — must stay client-only,
-// never SSR'd. See docs/09-performance-guide.md §9.3 (Cesium is code-split,
-// not part of the initial shell bundle).
-const Globe = dynamic(() => import("@/components/globe/Globe").then((m) => m.Globe), {
+// Canvas setup reads window.innerWidth/devicePixelRatio at mount — keep
+// client-only to avoid a hydration mismatch on first paint.
+const Globe = dynamic(() => import("@/components/globe2d/Globe2D").then((m) => m.Globe2D), {
   ssr: false,
   loading: () => (
     <div className="flex h-full w-full items-center justify-center bg-black text-neutral-500">

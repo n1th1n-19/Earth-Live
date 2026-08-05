@@ -10,10 +10,11 @@ const CACHE_TTL_SECONDS = 3 * 60 * 60; // matches satellite revisit cadence, §5
 const AREA = "world"; // FIRMS area/csv endpoint accepts a bounding box or "world"
 const DAY_RANGE = 1;
 // Global VIIRS 24h detections run 30k-100k+ rows (confirmed live: 66,608 on
-// 2026-07-25) — WildfireLayer renders one Resium <Entity> per row, and
-// mounting that many in one commit is what was crashing the browser tab.
-// Same cap pattern as MAX_FLIGHTS in opensky.ts; kept highest brightness_ti4
-// first since that's the strongest signal of an actual active fire.
+// 2026-07-25) — the globe's wildfires layer draws one marker per row (grid-
+// clustered at whole-globe zoom), and rendering that many in one frame is
+// what was crashing the browser tab. Same cap pattern as MAX_FLIGHTS in
+// opensky.ts; kept highest brightness_ti4 first since that's the strongest
+// signal of an actual active fire.
 const MAX_FIRES = 1000;
 
 export interface FireDetection {
