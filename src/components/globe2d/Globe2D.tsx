@@ -121,7 +121,18 @@ export function Globe2D({ latitude, longitude }: Globe2DProps) {
   const renderRef = useRef<() => void>(() => {});
   const animateToRef = useRef<(lng: number, lat: number, scale: number, durationMs?: number) => void>(() => {});
   const setRotationInstantRef = useRef<(lng: number, lat: number) => void>(() => {});
+  const zoomByRef = useRef<(factor: number) => void>(() => {});
   const earthRotationRef = useRef(earthRotation);
+
+  // Shared by recenter()/flyToTarget below — the same "fit radius" formula
+  // the main effect uses, with a same-shaped fallback (not a bare `1`) for
+  // the brief window before the container ref is attached.
+  function getBaseRadius(): number {
+    const el = containerRef.current;
+    const w = el?.clientWidth || window.innerWidth;
+    const h = el?.clientHeight || window.innerHeight;
+    return Math.min(w, h) / 2.5;
+  }
 
   // Refs can't be written during render (see react-hooks/refs), so syncing
   // the latest React state into them — for the imperative render loop below
@@ -170,9 +181,9 @@ export function Globe2D({ latitude, longitude }: Globe2DProps) {
 
     let containerWidth = container.clientWidth || window.innerWidth;
     let containerHeight = container.clientHeight || window.innerHeight;
-    const baseRadius = Math.min(containerWidth, containerHeight) / 2.5;
-    const MIN_SCALE = baseRadius * 0.5;
-    const MAX_SCALE = baseRadius * 4;
+    let baseRadius = Math.min(containerWidth, containerHeight) / 2.5;
+    let MIN_SCALE = baseRadius * 0.5;
+    let MAX_SCALE = baseRadius * 4;
 
     const projection = geoOrthographic()
       .scale(baseRadius)
@@ -328,14 +339,28 @@ export function Globe2D({ latitude, longitude }: Globe2DProps) {
     // Camera pose sampling — throttled (unlike the render loop, which runs
     // every animation frame during auto-rotation) since AirportsLayer
     // recomputes a haversine sort over every airport whenever this changes.
+    // Also skipped entirely when the pose hasn't moved meaningfully (e.g.
+    // rotation paused, already fully zoomed) so that recompute doesn't fire
+    // every 500ms regardless of whether the view actually changed.
+    let lastCameraPose: { latitude: number; longitude: number; height: number } | null = null;
     const cameraSampleInterval = setInterval(() => {
       const center = projection.invert?.([containerWidth / 2, containerHeight / 2]);
       if (!center) return;
-      setCameraPosition({
+      const pose = {
         latitude: center[1],
         longitude: center[0],
         height: GLOBAL_VIEW_HEIGHT_M * (baseRadius / projection.scale()),
-      });
+      };
+      if (
+        lastCameraPose &&
+        Math.abs(pose.latitude - lastCameraPose.latitude) < 0.05 &&
+        Math.abs(pose.longitude - lastCameraPose.longitude) < 0.05 &&
+        Math.abs(pose.height - lastCameraPose.height) / lastCameraPose.height < 0.02
+      ) {
+        return;
+      }
+      lastCameraPose = pose;
+      setCameraPosition(pose);
     }, 500);
 
     let autoRotateLocal = true;
@@ -354,14 +379,21 @@ export function Globe2D({ latitude, longitude }: Globe2DProps) {
     let animationFrame = requestAnimationFrame(tick);
 
     let dragDistance = 0;
-    function handleMouseDown(event: MouseEvent) {
+    // Tracked so the component-unmount cleanup can remove them if it fires
+    // mid-drag — otherwise a drag interrupted by unmount (e.g. navigating
+    // away) left these document listeners attached forever, referencing this
+    // closure's now-stale projection/render.
+    let activePointerMove: ((event: PointerEvent) => void) | null = null;
+    let activePointerUp: (() => void) | null = null;
+
+    function handlePointerDown(event: PointerEvent) {
       autoRotateLocal = false;
       dragDistance = 0;
       const startX = event.clientX;
       const startY = event.clientY;
       const startRotation = projection.rotate();
 
-      function onMove(moveEvent: MouseEvent) {
+      function onMove(moveEvent: PointerEvent) {
         const dx = moveEvent.clientX - startX;
         const dy = moveEvent.clientY - startY;
         dragDistance = Math.max(dragDistance, Math.hypot(dx, dy));
@@ -374,21 +406,29 @@ export function Globe2D({ latitude, longitude }: Globe2DProps) {
         render();
       }
       function onUp() {
-        document.removeEventListener("mousemove", onMove);
-        document.removeEventListener("mouseup", onUp);
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        activePointerMove = null;
+        activePointerUp = null;
         setTimeout(() => {
           autoRotateLocal = true;
         }, 10);
       }
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
+      activePointerMove = onMove;
+      activePointerUp = onUp;
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
     }
+
+    function zoomBy(factor: number) {
+      projection.scale(clampScale(projection.scale() * factor));
+      render();
+    }
+    zoomByRef.current = zoomBy;
 
     function handleWheel(event: WheelEvent) {
       event.preventDefault();
-      const factor = event.deltaY > 0 ? 0.9 : 1.1;
-      projection.scale(clampScale(projection.scale() * factor));
-      render();
+      zoomBy(event.deltaY > 0 ? 0.9 : 1.1);
     }
 
     let pendingHover: { x: number; y: number } | null = null;
@@ -444,6 +484,18 @@ export function Globe2D({ latitude, longitude }: Globe2DProps) {
       canvas.style.height = `${containerHeight}px`;
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
       projection.translate([containerWidth / 2, containerHeight / 2]);
+
+      // Rescale to the new container so the globe keeps the same *zoom
+      // level* (scaleFactor) instead of snapping back to a default fit sized
+      // for the old dimensions — otherwise a window resize or mobile
+      // orientation change left MIN_SCALE/MAX_SCALE (and the current zoom)
+      // tied to stale dimensions.
+      const scaleFactor = projection.scale() / baseRadius;
+      baseRadius = Math.min(containerWidth, containerHeight) / 2.5;
+      MIN_SCALE = baseRadius * 0.5;
+      MAX_SCALE = baseRadius * 4;
+      projection.scale(clampScale(scaleFactor * baseRadius));
+
       render();
     });
     resizeObserver.observe(container);
@@ -501,7 +553,7 @@ export function Globe2D({ latitude, longitude }: Globe2DProps) {
       render();
     }
 
-    canvas.addEventListener("mousedown", handleMouseDown);
+    canvas.addEventListener("pointerdown", handlePointerDown);
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     canvas.addEventListener("mousemove", handleMouseMove);
     canvas.addEventListener("click", handleClick);
@@ -514,11 +566,13 @@ export function Globe2D({ latitude, longitude }: Globe2DProps) {
       clearInterval(cameraSampleInterval);
       if (hoverFrame !== null) cancelAnimationFrame(hoverFrame);
       resizeObserver.disconnect();
-      canvas.removeEventListener("mousedown", handleMouseDown);
+      canvas.removeEventListener("pointerdown", handlePointerDown);
       canvas.removeEventListener("wheel", handleWheel);
       canvas.removeEventListener("mousemove", handleMouseMove);
       canvas.removeEventListener("click", handleClick);
       window.removeEventListener("keydown", onKeyDown);
+      if (activePointerMove) document.removeEventListener("pointermove", activePointerMove);
+      if (activePointerUp) document.removeEventListener("pointerup", activePointerUp);
     };
     // Runs once — store actions (setCameraPosition, etc.) are stable zustand
     // references, and all other reactive values flow in via stateRef.
@@ -537,23 +591,21 @@ export function Globe2D({ latitude, longitude }: Globe2DProps) {
   // Command palette / shared-URL fly-to.
   useEffect(() => {
     if (!flyToTarget) return;
-    const baseRadius = containerRef.current ? Math.min(containerRef.current.clientWidth, containerRef.current.clientHeight) / 2.5 : 1;
-    const targetScale = GLOBAL_VIEW_HEIGHT_M / (flyToTarget.height ?? 1_000_000) * baseRadius;
+    const targetScale = (GLOBAL_VIEW_HEIGHT_M / (flyToTarget.height ?? 1_000_000)) * getBaseRadius();
     animateToRef.current(flyToTarget.longitude, flyToTarget.latitude, targetScale);
     clearFlyTo();
   }, [flyToTarget, clearFlyTo]);
 
   function recenter() {
-    if (latitude == null || longitude == null || !containerRef.current) return;
-    const baseRadius = Math.min(containerRef.current.clientWidth, containerRef.current.clientHeight) / 2.5;
-    animateToRef.current(longitude, latitude, baseRadius * 2.5);
+    if (latitude == null || longitude == null) return;
+    animateToRef.current(longitude, latitude, getBaseRadius() * 2.5);
   }
 
   function zoomIn() {
-    canvasRef.current?.dispatchEvent(new WheelEvent("wheel", { deltaY: -100 }));
+    zoomByRef.current(1.1);
   }
   function zoomOut() {
-    canvasRef.current?.dispatchEvent(new WheelEvent("wheel", { deltaY: 100 }));
+    zoomByRef.current(0.9);
   }
 
   function toggleFullscreen() {
@@ -571,10 +623,9 @@ export function Globe2D({ latitude, longitude }: Globe2DProps) {
   }
 
   function toggleMeasuring() {
-    setMeasuring((prev) => {
-      if (prev) setMeasurePoints([]);
-      return !prev;
-    });
+    const next = !measuring;
+    setMeasuring(next);
+    if (!next) setMeasurePoints([]);
   }
 
   const measureDistanceKm = totalPathDistanceKm(measurePoints);

@@ -12,11 +12,16 @@ export function useIssData(): PropagatedPosition | null {
   const iss = stations?.find((s) => s.name.includes("ISS"));
 
   useEffect(() => {
-    if (!iss) return;
     function update() {
-      if (!iss) return;
-      const propagated = propagateTle(iss.tleLine1, iss.tleLine2, new Date());
-      if (propagated) setPosition(propagated);
+      if (!iss) {
+        // Clears a stale marker rather than leaving it frozen once ISS drops
+        // out of the tracked satellite list.
+        setPosition(null);
+        return;
+      }
+      // Assign unconditionally, including null — a failed propagation should
+      // clear the marker too, not leave it frozen at its last-known position.
+      setPosition(propagateTle(iss.tleLine1, iss.tleLine2, new Date()));
     }
     update();
     const interval = setInterval(update, 2000);

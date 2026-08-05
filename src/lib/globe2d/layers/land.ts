@@ -106,13 +106,18 @@ export function draw(args: DrawArgs, data: LandData) {
   ctx.lineWidth = 1 * scaleFactor;
   ctx.stroke();
 
+  // One path + one fill for every dot instead of a fill() per dot — same
+  // fillStyle for all of them, so batching is free and cuts thousands of
+  // draw calls per frame down to one.
+  const dotRadius = 1.2 * scaleFactor;
+  ctx.beginPath();
   data.dots.forEach((dot) => {
     if (!args.isFrontFacing(dot.lng, dot.lat)) return;
     const projected = args.projection([dot.lng, dot.lat]);
     if (!projected) return;
-    ctx.beginPath();
-    ctx.arc(projected[0], projected[1], 1.2 * scaleFactor, 0, 2 * Math.PI);
-    ctx.fillStyle = "#999999";
-    ctx.fill();
+    ctx.moveTo(projected[0] + dotRadius, projected[1]);
+    ctx.arc(projected[0], projected[1], dotRadius, 0, 2 * Math.PI);
   });
+  ctx.fillStyle = "#999999";
+  ctx.fill();
 }

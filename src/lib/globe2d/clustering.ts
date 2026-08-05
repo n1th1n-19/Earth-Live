@@ -22,7 +22,7 @@ export function clusterPoints<T>(
 ): Cluster<T>[] {
   const cells = new Map<
     string,
-    { items: T[]; sumX: number; sumY: number; sumLng: number; sumLat: number }
+    { items: T[]; sumX: number; sumY: number; sumSinLng: number; sumCosLng: number; sumLat: number }
   >();
 
   for (const point of points) {
@@ -31,13 +31,19 @@ export function clusterPoints<T>(
     const key = `${Math.floor(projected[0] / cellPx)},${Math.floor(projected[1] / cellPx)}`;
     let cell = cells.get(key);
     if (!cell) {
-      cell = { items: [], sumX: 0, sumY: 0, sumLng: 0, sumLat: 0 };
+      cell = { items: [], sumX: 0, sumY: 0, sumSinLng: 0, sumCosLng: 0, sumLat: 0 };
       cells.set(key, cell);
     }
     cell.items.push(point.item);
     cell.sumX += projected[0];
     cell.sumY += projected[1];
-    cell.sumLng += point.lng;
+    // Circular mean, not a plain average — a cell straddling the antimeridian
+    // (e.g. points at -179° and 179°) would otherwise average to 0° instead
+    // of ±180°, putting the cluster centroid (and its flyTo target) on the
+    // opposite side of the globe.
+    const lngRad = (point.lng * Math.PI) / 180;
+    cell.sumSinLng += Math.sin(lngRad);
+    cell.sumCosLng += Math.cos(lngRad);
     cell.sumLat += point.lat;
   }
 
@@ -46,7 +52,7 @@ export function clusterPoints<T>(
     return {
       screenX: cell.sumX / n,
       screenY: cell.sumY / n,
-      lng: cell.sumLng / n,
+      lng: (Math.atan2(cell.sumSinLng, cell.sumCosLng) * 180) / Math.PI,
       lat: cell.sumLat / n,
       items: cell.items,
     };

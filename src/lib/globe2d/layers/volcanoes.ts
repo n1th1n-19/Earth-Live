@@ -61,12 +61,15 @@ export function draw(args: DrawArgs, data: Volcano[] | null) {
     if (!p) continue;
     const active = isRecentlyActive(volcano.lastEruptionYear);
     const color = active ? "rgba(255,69,0,0.95)" : "rgba(255,69,0,0.45)";
-    icons.volcano(ctx, p[0], p[1], (active ? 5 : 3.5) * scaleFactor, color);
+    const iconRadius = (active ? 5 : 3.5) * scaleFactor;
+    icons.volcano(ctx, p[0], p[1], iconRadius, color);
     if (showLabels) {
+      ctx.save();
       ctx.font = "11px monospace";
       ctx.fillStyle = "#ffa500";
       ctx.textAlign = "center";
-      ctx.fillText(volcano.name, p[0], p[1] - 12);
+      ctx.fillText(volcano.name, p[0], p[1] - iconRadius - 4);
+      ctx.restore();
     }
   }
 }

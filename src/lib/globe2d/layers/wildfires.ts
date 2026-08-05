@@ -45,10 +45,12 @@ export function draw(args: DrawArgs, data: FireDetection[] | undefined) {
   for (const cluster of clusters(args, data)) {
     if (cluster.items.length >= CLUSTER_MIN_SIZE) {
       icons.flame(ctx, cluster.screenX, cluster.screenY, 9 * scaleFactor, "rgba(255,69,0,0.9)");
+      ctx.save();
       ctx.font = "10px monospace";
       ctx.fillStyle = "#fff";
       ctx.textAlign = "center";
       ctx.fillText(String(cluster.items.length), cluster.screenX, cluster.screenY + 3);
+      ctx.restore();
     } else {
       for (const fire of cluster.items) {
         const p = args.projection([fire.longitude, fire.latitude]);

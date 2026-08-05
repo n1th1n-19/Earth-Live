@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import * as d3 from "d3"
+import { geoOrthographic, geoPath, geoDistance, geoBounds, geoGraticule, timer as d3Timer } from "d3"
 import { useEarthquakes } from "@/lib/use-earthquakes"
 import type { Earthquake } from "@/lib/adapters/usgs-earthquakes"
 
@@ -59,20 +59,19 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
     context.scale(dpr, dpr)
 
     // Create projection and path generator for Canvas
-    const projection = d3
-      .geoOrthographic()
+    const projection = geoOrthographic()
       .scale(radius)
       .translate([containerWidth / 2, containerHeight / 2])
       .clipAngle(90)
 
-    const path = d3.geoPath().projection(projection).context(context)
+    const path = geoPath().projection(projection).context(context)
 
     // Orthographic projection() doesn't clip back-hemisphere points the way
     // path() does — check angular distance from the current view center.
     const isFrontFacing = (lng: number, lat: number): boolean => {
       const center = projection.invert?.([containerWidth / 2, containerHeight / 2])
       if (!center) return true
-      return d3.geoDistance([lng, lat], center) < Math.PI / 2
+      return geoDistance([lng, lat], center) < Math.PI / 2
     }
 
     const pointInPolygon = (point: [number, number], polygon: number[][]): boolean => {
@@ -133,33 +132,26 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
 
     const generateDotsInPolygon = (feature: GeoJSON.Feature, dotSpacing = 16) => {
       const dots: [number, number][] = []
-      const bounds = d3.geoBounds(feature)
+      const bounds = geoBounds(feature)
       const [[minLng, minLat], [maxLng, maxLat]] = bounds
 
       const stepSize = dotSpacing * 0.08
-      let pointsGenerated = 0
 
       for (let lng = minLng; lng <= maxLng; lng += stepSize) {
         for (let lat = minLat; lat <= maxLat; lat += stepSize) {
           const point: [number, number] = [lng, lat]
           if (pointInFeature(point, feature)) {
             dots.push(point)
-            pointsGenerated++
           }
         }
       }
 
-      console.log(
-        `[v0] Generated ${pointsGenerated} points for land feature:`,
-        feature.properties?.featurecla || "Land",
-      )
       return dots
     }
 
     interface DotData {
       lng: number
       lat: number
-      visible: boolean
     }
 
     const allDots: DotData[] = []
@@ -183,7 +175,7 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
 
       if (landFeatures) {
         // Draw graticule
-        const graticule = d3.geoGraticule()
+        const graticule = geoGraticule()
         context.beginPath()
         path(graticule())
         context.strokeStyle = "#ffffff"
@@ -203,6 +195,7 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
 
         // Draw halftone dots
         allDots.forEach((dot) => {
+          if (!isFrontFacing(dot.lng, dot.lat)) return
           const projected = projection([dot.lng, dot.lat])
           if (
             projected &&
@@ -235,6 +228,8 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
 
     renderRef.current = render
 
+    let cancelled = false
+
     const loadWorldData = async () => {
       try {
         setIsLoading(true)
@@ -245,23 +240,20 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
         if (!response.ok) throw new Error("Failed to load land data")
 
         const loaded: GeoJSON.FeatureCollection = await response.json()
+        if (cancelled) return
         landFeatures = loaded
 
-        // Generate dots for all land features
-        let totalDots = 0
         loaded.features.forEach((feature) => {
           const dots = generateDotsInPolygon(feature, 16)
           dots.forEach(([lng, lat]) => {
-            allDots.push({ lng, lat, visible: true })
-            totalDots++
+            allDots.push({ lng, lat })
           })
         })
-
-        console.log(`[v0] Total dots generated: ${totalDots} across ${loaded.features.length} land features`)
 
         render()
         setIsLoading(false)
       } catch {
+        if (cancelled) return
         setError("Failed to load land map data")
         setIsLoading(false)
       }
@@ -272,16 +264,23 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
     let autoRotate = true
     const rotationSpeed = 0.5
 
-    const rotate = () => {
+    // d3.timer passes elapsed ms since the timer started, not since the last
+    // tick — track the last tick ourselves so speed scales with actual frame
+    // time instead of a constant-per-tick increment (which drifts faster on
+    // high-refresh displays and slower under load).
+    let lastElapsed = 0
+    const rotate = (elapsed: number) => {
       if (autoRotate) {
-        rotation[0] += rotationSpeed
+        const delta = elapsed - lastElapsed
+        rotation[0] += rotationSpeed * (delta / 16.7)
         projection.rotate(rotation)
         render()
       }
+      lastElapsed = elapsed
     }
 
     // Auto-rotation timer
-    const rotationTimer = d3.timer(rotate)
+    const rotationTimer = d3Timer(rotate)
 
     const handleMouseDown = (event: MouseEvent) => {
       autoRotate = false
@@ -331,6 +330,7 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
 
     // Cleanup
     return () => {
+      cancelled = true
       rotationTimer.stop()
       canvas.removeEventListener("mousedown", handleMouseDown)
       canvas.removeEventListener("wheel", handleWheel)

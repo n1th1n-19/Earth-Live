@@ -145,6 +145,10 @@ const ICON_DEFS = {
 
 function drawFromDef(def: IconDef): IconDrawer {
   const half = Math.max(def.viewBoxWidth, def.viewBoxHeight) / 2;
+  // Parsed once per icon at module load, not once per draw call — markers
+  // redraw every frame during rotation, so re-parsing the same SVG path
+  // string hundreds of times a second was pure waste.
+  const paths = def.paths.map((d) => new Path2D(d));
   return (ctx, x, y, size, color, rotationRad = 0) => {
     ctx.save();
     ctx.translate(x, y);
@@ -153,8 +157,8 @@ function drawFromDef(def: IconDef): IconDrawer {
     ctx.scale(scale, scale);
     ctx.translate(-def.viewBoxWidth / 2, -def.viewBoxHeight / 2);
     ctx.fillStyle = color;
-    for (const d of def.paths) {
-      ctx.fill(new Path2D(d));
+    for (const path of paths) {
+      ctx.fill(path);
     }
     ctx.restore();
   };

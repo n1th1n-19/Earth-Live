@@ -89,6 +89,11 @@ export function hitTestPoint(
 ): HitCandidate | null {
   if (!data) return null;
   for (const alert of data) {
+    // projection() (unlike path()) doesn't clip back-hemisphere points, so a
+    // ring on the far side of the globe would still project to *some* screen
+    // coordinate — one that could coincide with the click even though draw()
+    // never rendered it there.
+    if (!args.isFrontFacing(alert.longitude, alert.latitude)) continue;
     for (const ring of alert.rings) {
       const screenRing = ringToLngLat(ring)
         .map(([lng, lat]) => args.projection([lng, lat]))
