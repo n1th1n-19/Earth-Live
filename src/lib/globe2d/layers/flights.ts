@@ -149,10 +149,10 @@ export function draw(
   const { ctx, path, projection, scaleFactor } = args;
 
   for (const route of visibleRoutes.values()) {
-    drawRouteLine(args, route, "rgba(0,255,255,0.35)", 1.5);
+    drawRouteLine(args, route, "rgba(255,214,0,0.35)", 1.5);
   }
   if (selectedRoute) {
-    drawRouteLine(args, selectedRoute, "rgba(0,255,255,0.8)", 2);
+    drawRouteLine(args, selectedRoute, "rgba(255,214,0,0.8)", 2);
   }
 
   if (!state.flights) return;
