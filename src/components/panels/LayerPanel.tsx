@@ -1,7 +1,9 @@
 "use client";
 
 import { Layers, X } from "lucide-react";
-import { useUiStore, type LayerId } from "@/lib/store";
+import { useUiStore, type LayerId, type PanelId } from "@/lib/store";
+
+const LOCAL_CARD_PANELS: PanelId[] = ["weather", "airQuality", "sunMoon"];
 
 // docs/04-ui-ux-spec.md §4.4 — categorized, collapsible, liveness badge +
 // cadence per row (FR-15). Only layers with a real renderer are listed —
@@ -28,6 +30,9 @@ export function LayerPanel() {
   const toggleLayer = useUiStore((s) => s.toggleLayer);
   const heatmap = useUiStore((s) => s.earthquakeHeatmap);
   const setHeatmap = useUiStore((s) => s.setEarthquakeHeatmap);
+  const dismissedPanels = useUiStore((s) => s.dismissedPanels);
+  const setDismissedPanels = useUiStore((s) => s.setDismissedPanels);
+  const localCardsOn = LOCAL_CARD_PANELS.every((id) => !dismissedPanels.includes(id));
 
   if (!open) {
     return (
@@ -74,6 +79,15 @@ export function LayerPanel() {
                 </button>
               );
             })}
+            {category === "Weather" && activeLayers.includes("weather") && (
+              <button
+                onClick={() => setDismissedPanels(localCardsOn ? LOCAL_CARD_PANELS : [])}
+                className="flex w-full items-center justify-between rounded-lg py-1.5 pl-6 pr-2 hover:bg-white/5"
+              >
+                <span className="text-xs text-neutral-400">Local cards</span>
+                <span className={`h-1.5 w-1.5 rounded-full ${localCardsOn ? "bg-emerald-400" : "bg-neutral-600"}`} />
+              </button>
+            )}
             {category === "Geological" && activeLayers.includes("earthquakes") && (
               <button
                 onClick={() => setHeatmap(!heatmap)}

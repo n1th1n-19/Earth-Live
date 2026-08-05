@@ -70,11 +70,12 @@ interface UiState {
   setEarthRotation: (on: boolean) => void;
 
   // Local-conditions cards the user has closed individually. Persisted, so a
-  // dismissed card stays gone across reloads. Recovery is deliberately the
-  // Weather layer toggle (see toggleLayer) rather than a separate control —
-  // it already governs these three cards.
+  // dismissed card stays gone across reloads — recoverable either by
+  // toggling the Weather layer off/on (see toggleLayer) or directly via the
+  // "Local cards" switch in LayerPanel.
   dismissedPanels: PanelId[];
   dismissPanel: (id: PanelId) => void;
+  setDismissedPanels: (ids: PanelId[]) => void;
 
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
@@ -161,6 +162,7 @@ export const useUiStore = create<UiState>()(
         if (current.includes(id)) return;
         set({ dismissedPanels: [...current, id] });
       },
+      setDismissedPanels: (ids) => set({ dismissedPanels: ids }),
 
       commandPaletteOpen: false,
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
