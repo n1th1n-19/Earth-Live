@@ -49,9 +49,11 @@ export interface WeatherAlert {
   senderName: string | null;
   expires: string | null;
   /**
-   * Outer rings as flat [lon, lat, lon, lat, …], ready for
-   * Cesium's Cartesian3.fromDegreesArray. A MultiPolygon contributes one
-   * entry per part, so a single alert can produce several rings.
+   * Outer rings as flat [lon, lat, lon, lat, …] — the globe's weather-alerts
+   * layer (src/lib/globe2d/layers/weather-alerts.ts) unpacks these into
+   * coordinate pairs for polygon fill/stroke and point-in-polygon hit
+   * testing. A MultiPolygon contributes one entry per part, so a single
+   * alert can produce several rings.
    */
   rings: number[][];
   /** Rough centroid of the first ring, for labelling and fly-to. */

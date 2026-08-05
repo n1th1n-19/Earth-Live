@@ -83,13 +83,14 @@ interface UiState {
   requestFlyTo: (latitude: number, longitude: number, height?: number) => void;
   clearFlyTo: () => void;
 
-  // FR-24: cursor coordinate readout, updated imperatively from Globe.tsx.
+  // FR-24: cursor coordinate readout, updated imperatively from Globe2D.tsx.
   cursorCoordinates: { latitude: number; longitude: number } | null;
   setCursorCoordinates: (coords: { latitude: number; longitude: number } | null) => void;
 
-  // FR-25/26: current camera pose, sampled on Cesium's `moveEnd` — this is
-  // what a shared URL actually needs to reproduce the view (fly-to targets
-  // above are one-shot commands, not a persistent "where is the camera now").
+  // FR-25/26: current camera pose, sampled on a throttled interval in
+  // Globe2D.tsx — this is what a shared URL actually needs to reproduce the
+  // view (fly-to targets above are one-shot commands, not a persistent
+  // "where is the camera now").
   cameraPosition: { latitude: number; longitude: number; height: number } | null;
   setCameraPosition: (pos: { latitude: number; longitude: number; height: number }) => void;
 

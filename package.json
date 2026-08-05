@@ -3,15 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/copy-cesium-assets.mjs",
     "dev": "next dev -p 3081",
-    "prebuild": "node scripts/copy-cesium-assets.mjs",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "check:chunks": "node scripts/check-chunk-integrity.mjs",
-    "postinstall": "node scripts/copy-cesium-assets.mjs && prisma generate"
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.0",
@@ -20,14 +17,13 @@
     "@tanstack/react-query": "^5.101.4",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
-    "cesium": "^1.143.0",
     "cmdk": "^1.1.1",
+    "d3": "^7.9.0",
     "lucide-react": "^1.26.0",
     "next": "16.2.11",
     "pg": "^8.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "resium": "^1.24.0",
     "satellite.js": "^6.0.2",
     "suncalc": "^2.0.1",
     "zod": "^4.4.3",
@@ -35,6 +31,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/d3": "^7.4.3",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
